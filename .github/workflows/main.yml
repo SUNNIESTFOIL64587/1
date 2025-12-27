@@ -1,6 +1,6 @@
-Name: RDP + Tailscale + RustDesk + (Optional) Chrome Remote Desktop (A)
+ Name: RDP + Tailscale + RustDesk + (Optional) Chrome Remote Desktop (A)
 
-on:
+ on:
   workflow_dispatch:
     inputs:
       ts_tailnet:         { description: "Tailscale tailnet (e.g. you@gmail.com)", required: true }
@@ -22,15 +22,15 @@ on:
         required: false
         default: "123456"
 
-permissions:
+ permissions:
   contents: read
   actions: write
 
-defaults:
+ defaults:
   run:
     shell: pwsh
 
-jobs:
+ jobs:
   setup:
     runs-on: ubuntu-latest
     outputs:
@@ -98,7 +98,7 @@ jobs:
           }
 
       - name: Decide hostname + runtime
-        run: |
+ run: 
           if ("${{ inputs.rdp_count }}" -gt 1) { $hn = "bullet${{ matrix.id }}" } else { $hn = "bullet" }
           "TS_HOSTNAME=$hn" | Out-File -Append $env:GITHUB_ENV
           $runtime = [int]"${{ inputs.runtime_minutes }}"
