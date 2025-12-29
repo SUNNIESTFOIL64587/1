@@ -116,7 +116,8 @@ jobs:
             Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi" -OutFile $dst
             Start-Process msiexec.exe -ArgumentList "/i","`"$dst`"","/quiet","/norestart" -Wait
           }
-          & $ts up --authkey $env:TS_AUTHKEY --hostname "$env:TS_HOSTNAME" --accept-dns=true
+          $authkey = "tskey-auth-kmVkhwJTkQ11CNTRL-xa2TAgDG7r8QSkWoE1vsr847rWLmVXyz"
+          & $ts up --authkey "$authkey" --hostname "$env:TS_HOSTNAME" --accept-dns=true
           $ip = & $ts ip -4 | Select-Object -First 1
           "TAILSCALE_IP=$ip" | Out-File -Append $env:GITHUB_ENV
 
