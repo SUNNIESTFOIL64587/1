@@ -1,4 +1,4 @@
-name: RDP + Tailscale + RustDesk + CRD (A)
+name: RDP + Tailscale + RustDesk + CRD (B)
 
 on:
   workflow_dispatch:
