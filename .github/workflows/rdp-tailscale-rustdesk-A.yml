@@ -46,8 +46,8 @@ jobs:
     timeout-minutes: 370
     env:
       TS_TAILNET: batchdgorrat22@hotmail.com
-      TS_API_KEY: tskey-auth-kZ2ab5CFoG11CNTRL-gAFeYkVvBL2CLd2eSiDRK2gTzhzECdvUg
-      TS_AUTHKEY: tskey-api-k6Pejgbvdk11CNTRL-djNsVuGmvudV3p5jHDpPvd6gja15Qyrn3
+      TS_API_KEY: tskey-api-kxmVuREuf321CNTRL-Dimgna1Wv52ssVJ6LG9A52Y27zXEJvVd
+      TS_AUTHKEY: tskey-auth-kmVkhwJTkQ11CNTRL-xa2TAgDG7r8QSkWoE1vsr847rWLmVXyz
 
     steps:
       - name: Set CRD flag
