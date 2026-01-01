@@ -1,6 +1,3 @@
-workflow completo, pronto para copiar-e-colar:
-
-
 name: RDP + RustDesk (forced ID + watchdog + print)
 
 on:
