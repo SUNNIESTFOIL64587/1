@@ -1,16 +1,16 @@
-name: RustDesk with Fixed Credentials
+name: RustDesk Remote Access
 
 on:
   workflow_dispatch:
     inputs:
       rustdesk_password:
-        description: "RustDesk password (choose your own)"
+        description: "RustDesk password"
         required: true
-        default: "SuaSenhaAqui123"
+        default: "SUNNI12345#"
       runtime_minutes:
         description: "Runtime in minutes (max 360)"
         required: false
-        default: "120"
+        default: "350"
 
 permissions:
   contents: read
@@ -33,24 +33,56 @@ jobs:
           Start-Process msiexec.exe -ArgumentList "/i","`"$msi`"","/quiet","/norestart" -Wait
           Write-Host "✅ RustDesk installed"
 
-      - name: Configure RustDesk with Fixed Password
+      - name: Configure RustDesk Password
         run: |
-          Write-Host "🔧 Configuring RustDesk..."
+          Write-Host "🔧 Setting RustDesk password..."
           $password = "${{ inputs.rustdesk_password }}"
           
-          # Set permanent password
-          & "C:\Program Files\RustDesk\rustdesk.exe" --password "$password"
+          # Set password
+          & "C:\Program Files\RustDesk\rustdesk.exe" --password "$password" 2>$null
+          Start-Sleep 5
+          
+          Write-Host "✅ Password configured: $password"
+
+      - name: Get RustDesk ID
+        run: |
+          Write-Host "🆔 Getting RustDesk ID..."
+          
+          # Start RustDesk service first
+          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--service"
           Start-Sleep 3
           
-          # Get permanent ID
-          $config = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id
-          Start-Sleep 2
+          # Get ID with multiple attempts
+          $id = ""
+          for ($i = 1; $i -le 5; $i++) {
+            try {
+              $output = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id 2>&1 | Out-String
+              $id = $output.Trim()
+              if ($id -match '^\d+$') {
+                break
+              }
+            } catch {}
+            Write-Host "Attempt $i..."
+            Start-Sleep 2
+          }
           
-          Write-Host "✅ RustDesk configured!"
+          # If still no ID, read from config file
+          if (-not ($id -match '^\d+$')) {
+            $configPath = "$env:APPDATA\RustDesk\config\RustDesk2.toml"
+            if (Test-Path $configPath) {
+              $content = Get-Content $configPath -Raw
+              if ($content -match 'id\s*=\s*"(\d+)"') {
+                $id = $matches[1]
+              }
+            }
+          }
+          
+          Write-Host ""
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🆔 RUSTDESK ID: $config"
-          Write-Host "🔑 PASSWORD: $password"
+          Write-Host "🆔 RUSTDESK ID: $id"
+          Write-Host "🔑 PASSWORD: ${{ inputs.rustdesk_password }}"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          Write-Host ""
 
       - name: Open Firewall Ports
         run: |
@@ -61,45 +93,37 @@ jobs:
           netsh advfirewall firewall add rule name="RD-UDP-21116" dir=in action=allow protocol=UDP localport=21116 | Out-Null
           Write-Host "✅ Firewall configured"
 
-      - name: Start RustDesk Service
+      - name: Start RustDesk GUI
         run: |
-          Write-Host "🚀 Starting RustDesk service..."
-          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--service"
-          Start-Sleep 5
-          
-          # Also start GUI
+          Write-Host "🚀 Starting RustDesk..."
           Start-Process "C:\Program Files\RustDesk\rustdesk.exe"
           Start-Sleep 5
-          Write-Host "✅ RustDesk running!"
-
-      - name: Display Connection Info
-        run: |
-          Write-Host ""
-          Write-Host "╔════════════════════════════════════════════╗"
-          Write-Host "║  🎯 CONNECT TO YOUR MACHINE NOW!          ║"
-          Write-Host "╚════════════════════════════════════════════╝"
-          Write-Host ""
-          Write-Host "1️⃣  Download RustDesk client: https://rustdesk.com/download"
-          Write-Host "2️⃣  Use the ID and password shown above"
-          Write-Host "3️⃣  Connection is active for ${{ inputs.runtime_minutes }} minutes"
-          Write-Host ""
+          Write-Host "✅ RustDesk is running"
 
       - name: Take Screenshot
+        continue-on-error: true
         run: |
           Write-Host "📸 Taking screenshot..."
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size)
-          $png = "$env:TEMP\screen.png"
-          $bmp.Save($png,[System.Drawing.Imaging.ImageFormat]::Png)
-          $g.Dispose(); $bmp.Dispose()
+          try {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size)
+            $png = "$env:TEMP\screen.png"
+            $bmp.Save($png,[System.Drawing.Imaging.ImageFormat]::Png)
+            $g.Dispose(); $bmp.Dispose()
 
-          $r = curl -s -F "file=@$png" https://store1.gofile.io/uploadFile
-          $j = $r | ConvertFrom-Json
-          if ($j.status -eq "ok") {
-            Write-Host "✅ Screenshot: $($j.data.downloadPage)"
+            Write-Host "📤 Uploading screenshot..."
+            $response = Invoke-RestMethod -Uri "https://store1.gofile.io/uploadFile" -Method Post -Form @{file = Get-Item $png}
+            
+            if ($response.status -eq "ok") {
+              Write-Host "✅ Screenshot: $($response.data.downloadPage)"
+            } else {
+              Write-Host "⚠️ Screenshot upload failed"
+            }
+          } catch {
+            Write-Host "⚠️ Screenshot failed: $($_.Exception.Message)"
           }
 
       - name: Keep Alive
@@ -109,14 +133,15 @@ jobs:
           $e = (Get-Date).AddMinutes($m)
           
           Write-Host ""
-          Write-Host "⏰ Session will end at: $e"
+          Write-Host "⏰ Session active until: $e"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          Write-Host ""
           
           while ((Get-Date) -lt $e) {
             $remaining = [math]::Round(($e - (Get-Date)).TotalMinutes, 1)
-            Write-Host "✅ Alive | $remaining min remaining | $(Get-Date -Format 'HH:mm:ss')"
+            Write-Host "✅ [$((Get-Date).ToString('HH:mm:ss'))] Session alive | $remaining minutes remaining"
             Start-Sleep 60
           }
           
           Write-Host ""
-          Write-Host "⏱️  Session expired. Goodbye!"
+          Write-Host "⏱️ Session ended"
