@@ -1,11 +1,16 @@
-name: RDP + RustDesk + Screenshot
+name: RustDesk with Fixed Credentials
 
 on:
   workflow_dispatch:
     inputs:
+      rustdesk_password:
+        description: "RustDesk password (choose your own)"
+        required: true
+        default: "SuaSenhaAqui123"
       runtime_minutes:
+        description: "Runtime in minutes (max 360)"
         required: false
-        default: "350"
+        default: "120"
 
 permissions:
   contents: read
@@ -15,71 +20,103 @@ defaults:
     shell: pwsh
 
 jobs:
-  rdp:
+  remote:
     runs-on: windows-latest
     timeout-minutes: 360
 
     steps:
-      - name: Create user and enable RDP
-        run: |
-          $u = "runneruser"
-          $p = "Runn3r!GitHub@2025"
-          if (-not (Get-LocalUser -Name $u -EA SilentlyContinue)) {
-            $sec = ConvertTo-SecureString $p -AsPlainText -Force
-            New-LocalUser -Name $u -Password $sec -AccountNeverExpires
-            Add-LocalGroupMember -Group Administrators -Member $u
-            Add-LocalGroupMember -Group "Remote Desktop Users" -Member $u
-          }
-          Set-ItemProperty "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name fDenyTSConnections -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop" | Out-Null
-
       - name: Install RustDesk
         run: |
-          $exe = "C:\Program Files\RustDesk\rustdesk.exe"
-          if (-not (Test-Path $exe)) {
-            $url = "https://github.com/rustdesk/rustdesk/releases/download/1.3.1/rustdesk-1.3.1-x86_64.msi"
-            $msi = "$env:TEMP\rustdesk.msi"
-            Invoke-WebRequest -Uri $url -OutFile $msi
-            Start-Process msiexec.exe -ArgumentList "/i","`"$msi`"","/quiet","/norestart" -Wait
-          }
+          Write-Host "📦 Installing RustDesk..."
+          $msi = "$env:TEMP\rustdesk.msi"
+          Invoke-WebRequest https://github.com/rustdesk/rustdesk/releases/download/1.3.1/rustdesk-1.3.1-x86_64.msi -OutFile $msi
+          Start-Process msiexec.exe -ArgumentList "/i","`"$msi`"","/quiet","/norestart" -Wait
+          Write-Host "✅ RustDesk installed"
 
-      - name: Open RustDesk ports
+      - name: Configure RustDesk with Fixed Password
         run: |
+          Write-Host "🔧 Configuring RustDesk..."
+          $password = "${{ inputs.rustdesk_password }}"
+          
+          # Set permanent password
+          & "C:\Program Files\RustDesk\rustdesk.exe" --password "$password"
+          Start-Sleep 3
+          
+          # Get permanent ID
+          $config = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id
+          Start-Sleep 2
+          
+          Write-Host "✅ RustDesk configured!"
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          Write-Host "🆔 RUSTDESK ID: $config"
+          Write-Host "🔑 PASSWORD: $password"
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Open Firewall Ports
+        run: |
+          Write-Host "🔥 Opening firewall ports..."
           21115..21119 | ForEach-Object {
-            netsh advfirewall firewall add rule name="RD-TCP-$_" dir=in action=allow protocol=TCP localport=$_
+            netsh advfirewall firewall add rule name="RD-TCP-$_" dir=in action=allow protocol=TCP localport=$_ | Out-Null
           }
-          netsh advfirewall firewall add rule name="RD-UDP-21116" dir=in action=allow protocol=UDP localport=21116
+          netsh advfirewall firewall add rule name="RD-UDP-21116" dir=in action=allow protocol=UDP localport=21116 | Out-Null
+          Write-Host "✅ Firewall configured"
 
-      - name: Start RustDesk
+      - name: Start RustDesk Service
         run: |
+          Write-Host "🚀 Starting RustDesk service..."
+          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--service"
+          Start-Sleep 5
+          
+          # Also start GUI
           Start-Process "C:\Program Files\RustDesk\rustdesk.exe"
-          Start-Sleep 10
+          Start-Sleep 5
+          Write-Host "✅ RustDesk running!"
 
-      - name: Screenshot + Upload
+      - name: Display Connection Info
         run: |
+          Write-Host ""
+          Write-Host "╔════════════════════════════════════════════╗"
+          Write-Host "║  🎯 CONNECT TO YOUR MACHINE NOW!          ║"
+          Write-Host "╚════════════════════════════════════════════╝"
+          Write-Host ""
+          Write-Host "1️⃣  Download RustDesk client: https://rustdesk.com/download"
+          Write-Host "2️⃣  Use the ID and password shown above"
+          Write-Host "3️⃣  Connection is active for ${{ inputs.runtime_minutes }} minutes"
+          Write-Host ""
+
+      - name: Take Screenshot
+        run: |
+          Write-Host "📸 Taking screenshot..."
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
-          $gfx = [System.Drawing.Graphics]::FromImage($bmp)
-          $gfx.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-          $png = "$env:TEMP\screenshot.png"
-          $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
-          $gfx.Dispose()
-          $bmp.Dispose()
-          $resp = curl.exe -s -L -F "file=@$png" https://store1.gofile.io/uploadFile
-          if ($resp -match '\{.*\}') {
-            $json = $resp | ConvertFrom-Json
-            if ($json.status -eq "ok") {
-              Write-Host "SCREENSHOT_URL=$($json.data.downloadPage)"
-            }
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size)
+          $png = "$env:TEMP\screen.png"
+          $bmp.Save($png,[System.Drawing.Imaging.ImageFormat]::Png)
+          $g.Dispose(); $bmp.Dispose()
+
+          $r = curl -s -F "file=@$png" https://store1.gofile.io/uploadFile
+          $j = $r | ConvertFrom-Json
+          if ($j.status -eq "ok") {
+            Write-Host "✅ Screenshot: $($j.data.downloadPage)"
           }
 
-      - name: Keep alive
+      - name: Keep Alive
         run: |
-          $mins = [int]"${{ inputs.runtime_minutes }}"
-          if ($mins -gt 360) { $mins = 360 }
-          $end = (Get-Date).AddMinutes($mins)
-          while ((Get-Date) -lt $end) {
-            Write-Host "Alive $(Get-Date)"
+          $m = [int]"${{ inputs.runtime_minutes }}"
+          if ($m -gt 360) { $m = 360 }
+          $e = (Get-Date).AddMinutes($m)
+          
+          Write-Host ""
+          Write-Host "⏰ Session will end at: $e"
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          while ((Get-Date) -lt $e) {
+            $remaining = [math]::Round(($e - (Get-Date)).TotalMinutes, 1)
+            Write-Host "✅ Alive | $remaining min remaining | $(Get-Date -Format 'HH:mm:ss')"
             Start-Sleep 60
           }
+          
+          Write-Host ""
+          Write-Host "⏱️  Session expired. Goodbye!"
