@@ -1,4 +1,4 @@
-name: RDP + RustDesk (clean)
+name: RDP + RustDesk (clean + print + watchdog)
 
 on:
   workflow_dispatch:
@@ -34,21 +34,48 @@ jobs:
           21115..21119 | %{ netsh advfirewall firewall add rule name="RD-$_" dir=in action=allow protocol=TCP localport=$_ }
           netsh advfirewall firewall add rule name="RD-UDP" dir=in action=allow protocol=UDP localport=21116
 
-      - name: Start RustDesk & Show Credentials
+      - name: Start RustDesk & Grab Credentials
         run: |
           Start-Process "C:\Program Files\RustDesk\rustdesk.exe"
-          Start-Sleep 10
-          $id = (Get-Content "$env:APPDATA\RustDesk\config\RustDesk2.toml" -EA 0 | sls id) -replace '\D',''
-          $pw = (Get-Content "$env:APPDATA\RustDesk\config\RustDesk2.toml" -EA 0 | sls password) -replace '.+=(.+)','$1'
+          Start-Sleep 15
+          $conf = "$env:APPDATA\RustDesk\config\RustDesk2.toml"
+          $id = (Get-Content $conf -EA 0 | sls '^id' ) -replace '\D',''
+          $pw = (Get-Content $conf -EA 0 | sls '^password' ) -replace '.+=(.+)','$1'
           Write-Host "==================================="
           Write-Host "RustDesk ID:  $id"
           Write-Host "Password:     $pw"
           Write-Host "==================================="
+          # Salva também num txt pra garantir
+          "ID:$id`nPW:$pw" | Out-File "$env:TEMP\rd.txt" -Encoding utf8
 
-      - name: Keep Alive
+      - name: Screenshot (fallback)
         run: |
-          $end = (Get-Date).AddMinutes([int]"${{ github.event.inputs.runtime_min }}")
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          Start-Sleep 5
+          $b = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,
+                                                [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height)
+          $g = [System.Drawing.Graphics]::FromImage($b)
+          $g.CopyFromScreen(0,0,0,0,$b.Size)
+          $g.Dispose()
+          $path = "$env:TEMP\desktop.png"
+          $b.Save($path)
+          Write-Host "Screenshot saved to $path"
+          # Converte para base64 e joga no log (você copia e decoda depois)
+          $bytes = [System.IO.File]::ReadAllBytes($path)
+          $b6464 = [Convert]::ToBase64String($bytes)
+          Write-Host "SCREENSHOT_BASE64_START"
+          Write-Host $b64
+          Write-Host "SCREENSHOT_BASE64_END"
+
+      - name: Watchdog (evita morte em 360 min)
+        run: |
+          $run = [int]"${{ github.event.inputs.runtime_min }}"
+          if ($run -gt 350){ $run = 350 }   # deixa margem pro job morrer antes dos 360
+          $end = (Get-Date).AddMinutes($run)
+          $file = "$env:TEMP\keepalive.txt"
           while ((Get-Date) -lt $end){
-            Write-Host "Alive – $(Get-Date)"
+            $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            "$ts  still running" | Out-File $file -Append
             Start-Sleep 60
           }
