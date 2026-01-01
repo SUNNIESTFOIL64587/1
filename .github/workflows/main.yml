@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       runtime_minutes:
-        description: "Runtime (max 360)"
         required: false
-        default: "120"
+        default: "350"
 
 permissions:
   contents: read
@@ -23,10 +22,11 @@ jobs:
     steps:
       - name: Create user and enable RDP
         run: |
-          $u = "runner"
-          $p = "Runner@123456"
+          $u = "runneruser"
+          $p = "Runn3r!GitHub@2025"
           if (-not (Get-LocalUser -Name $u -EA SilentlyContinue)) {
-            New-LocalUser -Name $u -Password (ConvertTo-SecureString $p -AsPlainText -Force) -AccountNeverExpires
+            $sec = ConvertTo-SecureString $p -AsPlainText -Force
+            New-LocalUser -Name $u -Password $sec -AccountNeverExpires
             Add-LocalGroupMember -Group Administrators -Member $u
             Add-LocalGroupMember -Group "Remote Desktop Users" -Member $u
           }
@@ -55,7 +55,7 @@ jobs:
           Start-Process "C:\Program Files\RustDesk\rustdesk.exe"
           Start-Sleep 10
 
-      - name: Screenshot + Upload GoFile
+      - name: Screenshot + Upload
         run: |
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
