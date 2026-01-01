@@ -1,4 +1,4 @@
-name: RustDesk Remote Access
+name: RustDesk Remote A
 
 on:
   workflow_dispatch:
@@ -8,12 +8,17 @@ on:
         required: true
         default: "SUNNI12345#"
       runtime_minutes:
-        description: "Runtime in minutes (max 360)"
+        description: "Runtime in minutes (max 355)"
         required: false
-        default: "350"
+        default: "355"
+      auto_restart:
+        description: "Auto restart (intercala A->B->A)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+  actions: write
 
 defaults:
   run:
@@ -69,8 +74,7 @@ jobs:
           
           Write-Host ""
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🆔 RUSTDESK ID: $id"
-          Write-Host "🔑 PASSWORD: ${{ inputs.rustdesk_password }}"
+          Write-Host "🅰️ WORKFLOW A | 🆔 ID: $id | 🔑 PASS: ${{ inputs.rustdesk_password }}"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host ""
 
@@ -138,20 +142,56 @@ jobs:
       - name: Keep Alive
         run: |
           $m = [int]"${{ inputs.runtime_minutes }}"
-          if ($m -gt 360) { $m = 360 }
+          if ($m -gt 355) { $m = 355 }
           $e = (Get-Date).AddMinutes($m)
           
           Write-Host ""
-          Write-Host "⏰ Session active until: $e"
+          Write-Host "🅰️ WORKFLOW A ACTIVE"
+          Write-Host "⏰ Session until: $e"
           Write-Host "📸 Screenshot: $env:SCREENSHOT_URL"
+          Write-Host "🔁 Auto-restart: ${{ inputs.auto_restart }}"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host ""
           
           while ((Get-Date) -lt $e) {
             $remaining = [math]::Round(($e - (Get-Date)).TotalMinutes, 1)
-            Write-Host "✅ [$((Get-Date).ToString('HH:mm:ss'))] Alive | $remaining min | Screenshot: $env:SCREENSHOT_URL"
+            Write-Host "✅ [A] [$((Get-Date).ToString('HH:mm:ss'))] Alive | $remaining min | $env:SCREENSHOT_URL"
             Start-Sleep 60
           }
           
           Write-Host ""
-          Write-Host "⏱️ Session ended"
+          Write-Host "⏱️ Workflow A completed ($m minutes)"
+
+      - name: Trigger Workflow B
+        if: always() && inputs.auto_restart == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Write-Host "🔄 Auto-restart enabled - switching to Workflow B..."
+          
+          $payload = @{
+            rustdesk_password = "${{ inputs.rustdesk_password }}"
+            runtime_minutes   = "${{ inputs.runtime_minutes }}"
+            auto_restart      = "${{ inputs.auto_restart }}"
+          }
+          
+          $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-B.yml/dispatches"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+          }
+          $body = @{
+            ref = "${{ github.ref_name }}"
+            inputs = $payload
+          } | ConvertTo-Json -Depth 10
+          
+          try {
+            Invoke-WebRequest -Method POST -Uri $url -Headers $headers -Body $body -ContentType "application/json"
+            Write-Host "✅ Workflow B triggered!"
+            Write-Host "🔄 A -> B handoff complete"
+          } catch {
+            Write-Host "❌ Failed to trigger B: $($_.Exception.Message)"
+          }
+          
+          Write-Host ""
+          Write-Host "👋 Workflow A ending, B starting..."
