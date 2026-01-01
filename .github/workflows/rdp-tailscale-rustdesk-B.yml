@@ -1,10 +1,10 @@
-name: RDP + RustDesk (clean + print + watchdog)
+name: RDP + RustDesk (forced ID + watchdog + print)
 
 on:
   workflow_dispatch:
     inputs:
       runtime_min:
-        description: "Minutes to keep alive"
+        description: "Minutes to keep alive (≤ 350)"
         required: false
         default: "120"
 
@@ -34,48 +34,56 @@ jobs:
           21115..21119 | %{ netsh advfirewall firewall add rule name="RD-$_" dir=in action=allow protocol=TCP localport=$_ }
           netsh advfirewall firewall add rule name="RD-UDP" dir=in action=allow protocol=UDP localport=21116
 
-      - name: Start RustDesk & Grab Credentials
+      - name: Force config file (garante ID/senha)
         run: |
-          Start-Process "C:\Program Files\RustDesk\rustdesk.exe"
-          Start-Sleep 15
-          $conf = "$env:APPDATA\RustDesk\config\RustDesk2.toml"
-          $id = (Get-Content $conf -EA 0 | sls '^id' ) -replace '\D',''
-          $pw = (Get-Content $conf -EA 0 | sls '^password' ) -replace '.+=(.+)','$1'
+          $confDir  = "$env:APPDATA\RustDesk\config"
+          $confFile = "$confDir\RustDesk2.toml"
+          New-Item -ItemType Directory -Force -Path $confDir | Out-Null
+          # Gera ID aleatório de 9 dígitos e senha fixa de 6
+          $id  = (Get-Random -Minimum 100000000 -Maximum 999999999).ToString()
+          $pw  = "654321"
+          @"
+id = "$id"
+password = "$pw"
+"@ | Out-File $confFile -Encoding utf8
           Write-Host "==================================="
           Write-Host "RustDesk ID:  $id"
           Write-Host "Password:     $pw"
           Write-Host "==================================="
-          # Salva também num txt pra garantir
-          "ID:$id`nPW:$pw" | Out-File "$env:TEMP\rd.txt" -Encoding utf8
 
-      - name: Screenshot (fallback)
+      - name: Start RustDesk Service
         run: |
-          Add-Type -AssemblyName System.Windows.Forms
-          Add-Type -AssemblyName System.Drawing
+          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" --server
           Start-Sleep 5
+          # Garante que o serviço fique rodando
+          sc.exe config RustDesk start= auto
+          sc.exe start RustDesk
+
+      - name: Screenshot (fallback visual)
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Start-Sleep 3
           $b = New-Object System.Drawing.Bitmap([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,
                                                 [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height)
           $g = [System.Drawing.Graphics]::FromImage($b)
-          $g.CopyFromScreen(0,0,0,0,$b.Size)
-          $g.Dispose()
-          $path = "$env:TEMP\desktop.png"
-          $b.Save($path)
-          Write-Host "Screenshot saved to $path"
-          # Converte para base64 e joga no log (você copia e decoda depois)
-          $bytes = [System.IO.File]::ReadAllBytes($path)
-          $b6464 = [Convert]::ToBase64String($bytes)
+          $g.CopyFromScreen(0,0,0,0,$b.Size); $g.Dispose()
+          $png = "$env:TEMP\desktop.png"
+          $b.Save($png); Write-Host "Screenshot saved: $png"
+          # Base64 para log
+          $bytes = [System.IO.File]::ReadAllBytes($png)
+          $b64   = [Convert]::ToBase64String($bytes)
           Write-Host "SCREENSHOT_BASE64_START"
           Write-Host $b64
           Write-Host "SCREENSHOT_BASE64_END"
 
-      - name: Watchdog (evita morte em 360 min)
+      - name: Watchdog (renova atividade a cada 55 min)
         run: |
-          $run = [int]"${{ github.event.inputs.runtime_min }}"
-          if ($run -gt 350){ $run = 350 }   # deixa margem pro job morrer antes dos 360
+          $run = [int]"${{ inputs.runtime_min }}"
+          if ($run -gt 350){ $run = 350 }
           $end = (Get-Date).AddMinutes($run)
-          $file = "$env:TEMP\keepalive.txt"
           while ((Get-Date) -lt $end){
-            $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            "$ts  still running" | Out-File $file -Append
-            Start-Sleep 60
+            Get-Date | Write-Host
+            # simples comando que altera timestamp de um arquivo = batida de vida
+            Get-ChildItem "$env:TEMP" | Select-Object -First 1 | %{ $_.LastWriteTime = Get-Date }
+            Start-Sleep (55*60)   # 55 min
           }
