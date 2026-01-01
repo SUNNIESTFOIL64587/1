@@ -3,7 +3,10 @@ name: RDP + RustDesk (clean)
 on:
   workflow_dispatch:
     inputs:
-      runtime_minutes: { description: "Minutes to keep alive", required: false, default: "120" }
+      runtime_min:
+        description: "Minutes to keep alive"
+        required: false
+        default: "120"
 
 permissions: { contents: read }
 
@@ -15,7 +18,7 @@ jobs:
       - name: Create Admin Users
         run: |
           foreach ($u in @("Sunni1","Sunni2")){
-            $p = ConvertTo-SecureString "Sunni12345#" -AsPlainText -Force
+            $p = ConvertTo-SecureString "Sunn1!GitHub2025#" -AsPlainText -Force
             if (!(Get-LocalUser -Name $u -EA 0)){ New-LocalUser $u -Password $p -AccountNeverExpires }
             Add-LocalGroupMember -Group Administrators -Member $u
             Add-LocalGroupMember -Group "Remote Desktop Users" -Member $u
@@ -35,9 +38,7 @@ jobs:
         run: |
           Start-Process "C:\Program Files\RustDesk\rustdesk.exe"
           Start-Sleep 10
-          # ID
           $id = (Get-Content "$env:APPDATA\RustDesk\config\RustDesk2.toml" -EA 0 | sls id) -replace '\D',''
-          # Senha aleatória que o RustDesk gera
           $pw = (Get-Content "$env:APPDATA\RustDesk\config\RustDesk2.toml" -EA 0 | sls password) -replace '.+=(.+)','$1'
           Write-Host "==================================="
           Write-Host "RustDesk ID:  $id"
@@ -46,7 +47,7 @@ jobs:
 
       - name: Keep Alive
         run: |
-          $end = (Get-Date).AddMinutes([int]"${{ inputs.runtime_minutes }}")
+          $end = (Get-Date).AddMinutes([int]"${{ github.event.inputs.runtime_min }}")
           while ((Get-Date) -lt $end){
             Write-Host "Alive – $(Get-Date)"
             Start-Sleep 60
