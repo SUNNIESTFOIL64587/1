@@ -1,0 +1,197 @@
+name: RustDesk Remote B
+
+on:
+  workflow_dispatch:
+    inputs:
+      rustdesk_password:
+        description: "RustDesk password"
+        required: true
+        default: "SUNNI12345#"
+      runtime_minutes:
+        description: "Runtime in minutes (max 355)"
+        required: false
+        default: "355"
+      auto_restart:
+        description: "Auto restart (intercala B->A->B)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: write
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  remote:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Install RustDesk
+        run: |
+          Write-Host "📦 Installing RustDesk..."
+          $msi = "$env:TEMP\rustdesk.msi"
+          Invoke-WebRequest https://github.com/rustdesk/rustdesk/releases/download/1.3.1/rustdesk-1.3.1-x86_64.msi -OutFile $msi
+          Start-Process msiexec.exe -ArgumentList "/i","`"$msi`"","/quiet","/norestart" -Wait
+          Write-Host "✅ RustDesk installed"
+
+      - name: Configure RustDesk Password
+        run: |
+          Write-Host "🔧 Setting RustDesk password..."
+          $password = "${{ inputs.rustdesk_password }}"
+          & "C:\Program Files\RustDesk\rustdesk.exe" --password "$password" 2>$null
+          Start-Sleep 5
+          Write-Host "✅ Password configured: $password"
+
+      - name: Get RustDesk ID
+        run: |
+          Write-Host "🆔 Getting RustDesk ID..."
+          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--service"
+          Start-Sleep 3
+          
+          $id = ""
+          for ($i = 1; $i -le 5; $i++) {
+            try {
+              $output = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id 2>&1 | Out-String
+              $id = $output.Trim()
+              if ($id -match '^\d+$') { break }
+            } catch {}
+            Start-Sleep 2
+          }
+          
+          if (-not ($id -match '^\d+$')) {
+            $configPath = "$env:APPDATA\RustDesk\config\RustDesk2.toml"
+            if (Test-Path $configPath) {
+              $content = Get-Content $configPath -Raw
+              if ($content -match 'id\s*=\s*"(\d+)"') {
+                $id = $matches[1]
+              }
+            }
+          }
+          
+          Write-Host ""
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          Write-Host "🅱️ WORKFLOW B | 🆔 ID: $id | 🔑 PASS: ${{ inputs.rustdesk_password }}"
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          Write-Host ""
+
+      - name: Open Firewall Ports
+        run: |
+          Write-Host "🔥 Opening firewall ports..."
+          21115..21119 | ForEach-Object {
+            netsh advfirewall firewall add rule name="RD-TCP-$_" dir=in action=allow protocol=TCP localport=$_ | Out-Null
+          }
+          netsh advfirewall firewall add rule name="RD-UDP-21116" dir=in action=allow protocol=UDP localport=21116 | Out-Null
+          Write-Host "✅ Firewall configured"
+
+      - name: Start RustDesk GUI
+        run: |
+          Write-Host "🚀 Starting RustDesk..."
+          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -WindowStyle Hidden
+          Start-Sleep 5
+          Write-Host "✅ RustDesk is running"
+
+      - name: Screenshot + Upload to Gofile
+        run: |
+          Write-Host "📸 Taking screenshot..."
+          $screenshotPath = "$env:TEMP\screen.png"
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose()
+          $bitmap.Dispose()
+
+          Write-Host "📤 Uploading screenshot..."
+          $curlResult = curl -F "file=@$screenshotPath" https://store1.gofile.io/uploadFile
+          $json = $curlResult | ConvertFrom-Json
+          if ($json.status -eq "ok") {
+            $screenshotUrl = $json.data.downloadPage
+            Write-Host "✅ Screenshot URL: $screenshotUrl"
+            "SCREENSHOT_URL=$screenshotUrl" | Out-File -Append $env:GITHUB_ENV
+          } else {
+            Write-Host "⚠️ Screenshot upload failed"
+          }
+
+      - name: Download and Run Optimization Script
+        run: |
+          Write-Host "⚡ Downloading optimization script..."
+          $otmUrl = "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/Otimization.cmd"
+          $otmPath = "$env:TEMP\Otimization.cmd"
+          
+          try {
+            Invoke-WebRequest -Uri $otmUrl -OutFile $otmPath -ErrorAction Stop
+            Write-Host "✅ Script downloaded"
+            
+            Write-Host "🚀 Running optimization..."
+            Start-Process cmd.exe -ArgumentList "/c `"$otmPath`"" -Wait -NoNewWindow
+            Write-Host "✅ Optimization completed"
+            
+            Remove-Item $otmPath -Force -ErrorAction SilentlyContinue
+          } catch {
+            Write-Host "⚠️ Optimization script failed: $($_.Exception.Message)"
+            Write-Host "Continuing anyway..."
+          }
+
+      - name: Keep Alive
+        run: |
+          $m = [int]"${{ inputs.runtime_minutes }}"
+          if ($m -gt 355) { $m = 355 }
+          $e = (Get-Date).AddMinutes($m)
+          
+          Write-Host ""
+          Write-Host "🅱️ WORKFLOW B ACTIVE"
+          Write-Host "⏰ Session until: $e"
+          Write-Host "📸 Screenshot: $env:SCREENSHOT_URL"
+          Write-Host "🔁 Auto-restart: ${{ inputs.auto_restart }}"
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          Write-Host ""
+          
+          while ((Get-Date) -lt $e) {
+            $remaining = [math]::Round(($e - (Get-Date)).TotalMinutes, 1)
+            Write-Host "✅ [B] [$((Get-Date).ToString('HH:mm:ss'))] Alive | $remaining min | $env:SCREENSHOT_URL"
+            Start-Sleep 60
+          }
+          
+          Write-Host ""
+          Write-Host "⏱️ Workflow B completed ($m minutes)"
+
+      - name: Trigger Workflow A
+        if: always() && inputs.auto_restart == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Write-Host "🔄 Auto-restart enabled - switching back to Workflow A..."
+          
+          $payload = @{
+            rustdesk_password = "${{ inputs.rustdesk_password }}"
+            runtime_minutes   = "${{ inputs.runtime_minutes }}"
+            auto_restart      = "${{ inputs.auto_restart }}"
+          }
+          
+          $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-A.yml/dispatches"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+          }
+          $body = @{
+            ref = "${{ github.ref_name }}"
+            inputs = $payload
+          } | ConvertTo-Json -Depth 10
+          
+          try {
+            Invoke-WebRequest -Method POST -Uri $url -Headers $headers -Body $body -ContentType "application/json"
+            Write-Host "✅ Workflow A triggered!"
+            Write-Host "🔄 B -> A handoff complete"
+          } catch {
+            Write-Host "❌ Failed to trigger A: $($_.Exception.Message)"
+          }
+          
+          Write-Host ""
+          Write-Host "👋 Workflow B ending, A starting..."
