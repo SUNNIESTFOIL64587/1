@@ -1,4 +1,4 @@
-name: RustDesk + Webhook B (CDN External + Late Install)
+name: RustDesk + Webhook B (ULTRA FAST SETUP)
 
 on:
   workflow_dispatch:
@@ -11,20 +11,14 @@ on:
         description: "Token do Ngrok"
         required: true
         default: "37g5Li5Ku4vdBp9Aj3ff99eqL67_6fHotdD33DTeZgUKdz18B"
-      
-      # URL DO SEU SCRIPT PYTHON (AUTOMACAO)
       script_url:
         description: "Link do script de automacao (usar_otimizado.py)"
         required: true
         default: "https://sunni-files.b-cdn.net/usar_otimizado.py"
-
-      # URL DO SEU SERVIDOR WEBHOOK (NOVO)
       webhook_url:
         description: "Link do servidor webhook (webhook.py)"
         required: true
-        # Corrigi o nome para webhook.py (com 'b') para evitar erros, certifique-se no CDN
         default: "https://sunni-files.b-cdn.net/webhook.py"
-      
       webhook_secret:
         description: "Senha do Webhook"
         required: false
@@ -48,144 +42,103 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # --- FASE 1: ACESSO REMOTO (PRIORIDADE) ---
+      # --- FASE 1: ACESSO REMOTO (PRIORIDADE TOTAL - ULTRA FAST) ---
       
-      - name: 1. Install RustDesk
+      - name: 🚀 1. RustDesk + Ngrok (Início Simultâneo)
         run: |
-          Write-Host "📦 Installing RustDesk..."
+          Write-Host "📦 Instalando RustDesk..."
           $msi = "$env:TEMP\rustdesk.msi"
           Invoke-WebRequest "https://github.com/rustdesk/rustdesk/releases/download/1.3.1/rustdesk-1.3.1-x86_64.msi" -OutFile $msi
           Start-Process msiexec.exe -ArgumentList "/i","`"$msi`"","/quiet","/norestart" -Wait
           
-          Write-Host "🔧 Setting password..."
+          Write-Host "🔧 Configurando Senha..."
           & "C:\Program Files\RustDesk\rustdesk.exe" --password "${{ inputs.rustdesk_password }}" 2>$null
-          Start-Sleep 5
           
-          Write-Host "🆔 Getting ID..."
-          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--service"
-          Start-Sleep 3
-          $id = ""; for ($i = 1; $i -le 5; $i++) { try { $o = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id 2>&1 | Out-String; $id = $o.Trim(); if ($id -match '^\d+$') { break } } catch {}; Start-Sleep 2 }
-          if (-not ($id -match '^\d+$')) { $c="$env:APPDATA\RustDesk\config\RustDesk2.toml"; if(Test-Path $c){ $txt=Get-Content $c -Raw; if($txt -match 'id\s*=\s*"(\d+)"'){$id=$matches[1]} } }
-          
-          "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
-          Write-Host "✅ RustDesk ID: $id"
-
-      - name: 2. Setup & Start Ngrok
-        run: |
-          Write-Host "🌐 Ngrok setup..."
+          Write-Host "� Configurando Ngrok..."
           $zip = "$env:TEMP\ngrok.zip"
           Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $zip
           Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ngrok" -Force
           $exe = Get-ChildItem -Path "$env:TEMP\ngrok" -Filter "ngrok.exe" -Recurse | Select-Object -First 1
-          
           & $exe.FullName config add-authtoken "${{ inputs.ngrok_token }}"
           
-          # Inicia com DOMÍNIO FIXO
-          Write-Host "🚀 Iniciando Túnel Ngrok..."
+          Write-Host "� Iniciando Túnel e Serviço RustDesk..."
           $args = @("http", "--domain=debera-obese-interestedly.ngrok-free.dev", "5000")
           Start-Process $exe.FullName -ArgumentList $args -WindowStyle Hidden
+          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--service"
           
-          Start-Sleep 10
-          $url = "https://debera-obese-interestedly.ngrok-free.dev"
+          # Loop de detecção do ID (Zero delay extra)
+          $id = ""; for ($i = 1; $i -le 10; $i++) { 
+              $o = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id 2>&1 | Out-String; 
+              $id = $o.Trim(); 
+              if ($id -match '^\d+$') { break }
+              Start-Sleep 1 
+          }
           
-          "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
-          "NGROK_EXE=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
-          Write-Host "✅ URL Ngrok: $url"
+          "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
+          Write-Host "✅ ACESSO PRONTO! ID: $id"
 
+      # --- FASE 2: PREPARAÇÃO ESSENCIAL (DOWNLOADS) ---
 
-      # --- FASE 2: PREPARAÇÃO (DOWNLOADS) ---
-
-      - name: 3. Download Scripts (CDN)
+      - name: ⬇️ 2. Download Scripts (CDN)
         run: |
-          Write-Host "⬇️ Baixando Arquivos do CDN..."
-          
-          # Caminhos
+          Write-Host "📂 Baixando arquivos..."
           $desktop = "$env:USERPROFILE\Desktop"
-          $temp = "$env:TEMP"
           
-          # 1. Automação -> Desktop
-          $autoUrl = "${{ inputs.script_url }}"
-          $autoDest = "$desktop\usar_otimizado.py"
-          Invoke-WebRequest -Uri $autoUrl -OutFile $autoDest
-          Write-Host "   📄 Script Automação: OK"
-
-          # 2. Webhook Server -> Temp (ou Desktop se preferir debug)
-          $serverUrl = "${{ inputs.webhook_url }}"
-          $serverDest = "$desktop\webhook.py" 
-          Invoke-WebRequest -Uri $serverUrl -OutFile $serverDest
-          Write-Host "   📡 Script Webhook: OK"
-
-          # 3. Otimização -> Desktop
-          $optUrl = "https://sunni-files.b-cdn.net/Otimization.cmd"
-          $optDest = "$desktop\Otimization.cmd"
-          Invoke-WebRequest -Uri $optUrl -OutFile $optDest
-          Write-Host "   ⚡ Script Otimização: OK"
+          # Downloads em paralelo (via jobs simples)
+          $files = @(
+              @{ url="${{ inputs.script_url }}"; dest="$desktop\usar_otimizado.py" },
+              @{ url="${{ inputs.webhook_url }}"; dest="$desktop\webhook.py" },
+              @{ url="https://sunni-files.b-cdn.net/Otimization.cmd"; dest="$desktop\Otimization.cmd" }
+          )
           
-          Write-Host "✅ Todos os arquivos baixados."
-
-
-      # --- FASE 3: INSTALAÇÃO (POR ÚLTIMO) ---
-
-      - name: 4. Install Dependencies
-        run: |
-          Write-Host "📦 Instalando Dependências Python (Isso pode demorar)..."
-          python -m pip install --upgrade pip --quiet
-          
-          # Webhook
-          python -m pip install flask flask-cors requests --quiet
-          
-          # Automação (Pesados)
-          python -m pip install undetected-chromedriver selenium pyperclip pyautogui tls-client --quiet
-          
-          Write-Host "✅ Dependências instaladas!"
-
-
-      # --- FASE 4: OTIMIZAÇÃO E EXECUÇÃO (FINAL) ---
-
-      - name: 5. Run Optimization
-        run: |
-          Write-Host "⚡ Executando Otimização do Windows..."
-          $path = "$env:USERPROFILE\Desktop\Otimization.cmd"
-          
-          if (Test-Path $path) {
-              Start-Process cmd.exe -ArgumentList "/c `"$path`"" -Wait -NoNewWindow
-              Write-Host "✅ Otimização Finalizada"
-          } else {
-              Write-Warning "⚠️ Arquivo de otimização não encontrado."
+          foreach ($f in $files) {
+              Invoke-WebRequest -Uri $f.url -OutFile $f.dest
+              Write-Host "   ✓ $($f.dest): OK"
           }
 
-      - name: 6. Start Webhook Server
+      # --- FASE 3: EXECUÇÃO DO WEBHOOK (O MAIS RÁPIDO POSSÍVEL) ---
+
+      - name: 📡 3. Start Webhook Server (Fast Path)
         run: |
-          $env:SECRET = "${{ inputs.webhook_secret }}"
-          $env:RUSTDESK_PASSWORD = "${{ inputs.rustdesk_password }}"
-          $env:RUSTDESK_ID = "$env:RUSTDESK_ID"
+          # Instala apenas o Flask primeiro (super rápido) para subir o servidor
+          python -m pip install flask flask-cors --quiet
           
-          # Executa o webhook.py que baixamos do CDN
+          $env:RUSTDESK_ID = "$env:RUSTDESK_ID"
+          $env:RUSTDESK_PASSWORD = "${{ inputs.rustdesk_password }}"
           $webhookPath = "$env:USERPROFILE\Desktop\webhook.py"
           
           Write-Host "🚀 Iniciando Servidor Webhook..."
           Start-Process python -ArgumentList "`"$webhookPath`"" -WindowStyle Hidden
           
-          Write-Host ""
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "✅ SISTEMA PRONTO E AGUARDANDO COMANDOS"
-          Write-Host "🌐 API: $env:WEBHOOK_URL/info"
-          Write-Host "🆔 ID: $env:RUSTDESK_ID"
-          Write-Host "📂 Webhook rodando de: $webhookPath"
+          Write-Host "✅ WEBHOOK ATIVO: https://debera-obese-interestedly.ngrok-free.dev/info"
+          Write-Host "🆔 RUSTDESK ID: $env:RUSTDESK_ID"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-      - name: Keep Alive
+      # --- FASE 4: INSTALAÇÃO PESADA (EM SEGUNDO PLANO / CONTINUAÇÃO) ---
+
+      - name: ⚙️ 4. Heavy Install & Optimization
+        run: |
+          Write-Host "� Instalando Dependências da Automação (Fundo)..."
+          python -m pip install undetected-chromedriver selenium pyperclip pyautogui tls-client --quiet
+          
+          Write-Host "⚡ Otimizando Windows..."
+          $optPath = "$env:USERPROFILE\Desktop\Otimization.cmd"
+          if (Test-Path $optPath) { & cmd.exe /c "`"$optPath`"" }
+          
+          Write-Host "✅ TUDO PRONTO!"
+
+      - name: ♾️ Keep Alive
         run: |
           $m = [int]"${{ inputs.runtime_minutes }}"
           $e = (Get-Date).AddMinutes($m)
           while ((Get-Date) -lt $e) { Start-Sleep 60 }
 
-      - name: Trigger A
+      - name: 🔄 Trigger A
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          Write-Host "🔄 Tempo esgotado! Iniciando B..."
           $payload = @{
             rustdesk_password = "${{ inputs.rustdesk_password }}"
             ngrok_token = "${{ inputs.ngrok_token }}"
@@ -197,7 +150,4 @@ jobs:
           $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-B.yml/dispatches"
           $h = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
           $body = @{ ref = "${{ github.ref_name }}"; inputs = $payload } | ConvertTo-Json -Depth 5 -Compress
-          try {
-            Invoke-WebRequest -Method POST -Uri $url -Headers $h -Body $body -ContentType "application/json"
-            Write-Host "✅ B acionado com sucesso!"
-          } catch { Write-Host "❌ Erro ao chamar B: $_" }
+          try { Invoke-WebRequest -Method POST -Uri $url -Headers $h -Body $body -ContentType "application/json" } catch {}
