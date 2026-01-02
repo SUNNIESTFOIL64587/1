@@ -1,4 +1,4 @@
-name: RustDesk + Webhook B (Auto)
+name: RustDesk + Webhook B (API Mode)
 
 on:
   workflow_dispatch:
@@ -51,7 +51,7 @@ jobs:
           Write-Host "🔧 Setting password..."
           & "C:\Program Files\RustDesk\rustdesk.exe" --password "${{ inputs.rustdesk_password }}" 2>$null
           Start-Sleep 5
-          Write-Host "✅ Password set to: ${{ inputs.rustdesk_password }}"
+          Write-Host "✅ Password set"
 
       - name: Get RustDesk ID
         run: |
@@ -149,12 +149,26 @@ jobs:
 
           app = Flask(__name__)
           SECRET = os.environ.get('SECRET', 'default')
+          
+          # Pega credenciais do ambiente
+          RD_ID = os.environ.get('RUSTDESK_ID', 'Not Found')
+          RD_PASS = os.environ.get('RUSTDESK_PASSWORD', 'Not Found')
 
           requests_log = []
 
           @app.route('/health')
           def health():
               return jsonify({'status': 'online', 'time': datetime.now().isoformat()})
+
+          # NOVA ROTA: Retorna as credenciais para o seu Frontend/Agent
+          @app.route('/info', methods=['GET'])
+          def info():
+              return jsonify({
+                  'status': 'online',
+                  'rustdesk_id': RD_ID,
+                  'rustdesk_password': RD_PASS,
+                  'machine_time': datetime.now().isoformat()
+              })
 
           @app.route('/webhook', methods=['POST'])
           def webhook():
@@ -210,6 +224,8 @@ jobs:
           Write-Host "🚀 Starting webhook..."
           
           $env:SECRET = "${{ inputs.webhook_secret }}"
+          # Passamos a senha explicitamente para o ambiente do Python
+          $env:RUSTDESK_PASSWORD = "${{ inputs.rustdesk_password }}"
           
           # Start Flask
           Start-Process python -ArgumentList "$env:TEMP\webhook.py" -WindowStyle Hidden
@@ -226,18 +242,16 @@ jobs:
           $url = "https://$domain"
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ Webhook URL: $url/webhook"
+          Write-Host "✅ Info URL: $url/info"
 
       - name: Display Info
         run: |
           Write-Host ""
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🅰️ WORKFLOW A - ONLINE (HARDCODED)"
+          Write-Host "🅰️ WORKFLOW A - API MODE ONLINE"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
-          Write-Host "🔑 RustDesk Pass: ${{ inputs.rustdesk_password }}"
-          Write-Host "🌐 Webhook URL: $env:WEBHOOK_URL/webhook"
-          Write-Host "🔐 Webhook Secret: ${{ inputs.webhook_secret }}"
-          Write-Host "📸 Screenshot: $env:SCREENSHOT_URL"
+          Write-Host "ℹ️ API Info: $env:WEBHOOK_URL/info"
+          Write-Host "   (Acesse esse link para ver ID e Senha)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host ""
 
