@@ -1,9 +1,8 @@
-name: RustDesk + Webhook + Script Loader A (Fixed)
+name: RustDesk + Webhook A (Secure API)
 
 on:
   workflow_dispatch:
     inputs:
-      # --- CONFIGURAÇÕES BÁSICAS ---
       rustdesk_password:
         description: "Senha do RustDesk"
         required: true
@@ -13,11 +12,11 @@ on:
         required: true
         default: "37g5Li5Ku4vdBp9Aj3ff99eqL67_6fHotdD33DTeZgUKdz18B"
       
-      # --- LINK ATUALIZADO DO SCRIPT PYTHON ---
-      script_url:
-        description: "Link RAW do script python"
+      # SEU NOVO TOKEN PAT (Seguro)
+      github_token:
+        description: "GitHub Token (PAT)"
         required: true
-        default: "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/usar_otimizado.py?token=GHSAT0AAAAAADSCJDQQJZFVRHW6RK7KI35C2KXHR4Q"
+        default: "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"
       
       webhook_secret:
         description: "Senha do Webhook"
@@ -42,7 +41,6 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # 1. Instala RustDesk
       - name: Install RustDesk
         run: |
           Write-Host "📦 Installing RustDesk..."
@@ -68,60 +66,71 @@ jobs:
           "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ RustDesk ID: $id"
 
-      # 2. Executa Otimização (CORRIGIDO)
-      - name: Run Optimization
+      # --- DOWNLOAD 1: Otimization.cmd (Via API Segura) ---
+      - name: Run Optimization (Secure)
         run: |
-          Write-Host "⚡ Optimization..."
+          Write-Host "⚡ Optimization via GitHub API..."
           try {
-            # URL Atualizada com Token
-            $url = "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/Otimization.cmd?token=GHSAT0AAAAAADSCJDQRF3A3JXSZT5NADYG62KXHREQ"
+            # Endpoint da API para o arquivo CMD
+            $apiUrl = "https://api.github.com/repos/SUNNIESTFOIL64587/otm/contents/Otimization.cmd"
             $path = "$env:TEMP\Otimization.cmd"
             
+            # Monta os Headers (Auth + Accept RAW)
+            $headers = @{
+                "Authorization" = "Bearer ${{ inputs.github_token }}"
+                "Accept" = "application/vnd.github.v3.raw"
+            }
+            
             Write-Host "   ⬇️ Baixando Otimization.cmd..."
-            Invoke-WebRequest -Uri $url -OutFile $path
+            Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $path
             
             if (Test-Path $path) {
-                Write-Host "   ⚙️ Executando via CMD..."
-                # Executa direto no CMD e espera terminar
+                Write-Host "   ⚙️ Executando..."
                 Start-Process cmd.exe -ArgumentList "/c `"$path`"" -Wait -NoNewWindow
                 Write-Host "✅ Otimização concluída"
                 Remove-Item $path -Force
             } else {
-                Write-Error "❌ Falha ao baixar arquivo de otimização."
+                Write-Error "❌ Falha ao baixar Otimization.cmd"
             }
           } catch {
-            Write-Host "⚠️ Erro na etapa de otimização: $_"
+            Write-Host "⚠️ Erro otimização: $_"
           }
 
-      # 3. Prepara Ambiente Python (Sem Screenshot)
       - name: Install Python Dependencies
         run: |
-          Write-Host "📦 Instalando bibliotecas do script..."
+          Write-Host "📦 Instalando bibliotecas..."
           python -m pip install --upgrade pip --quiet
           python -m pip install flask flask-cors requests --quiet
           python -m pip install selenium undetected-chromedriver pyautogui pyperclip tls_client --quiet
-          Write-Host "✅ Todas as dependências instaladas!"
+          Write-Host "✅ Dependências instaladas!"
 
-      # 4. Baixa o Script Python (Link Atualizado)
-      - name: Download Automation Script
+      # --- DOWNLOAD 2: Script Python (Via API Segura) ---
+      - name: Download Automation Script (Secure)
         run: |
-          Write-Host "⬇️ Baixando script de automação..."
-          $url = "${{ inputs.script_url }}"
+          Write-Host "⬇️ Baixando script Python via API..."
+          # Endpoint da API para o arquivo .py
+          $apiUrl = "https://api.github.com/repos/SUNNIESTFOIL64587/otm/contents/usar_otimizado.py"
           $dest = "$env:TEMP\usar_otimizado.py"
           
+          # Mesmos Headers de Autenticação
+          $headers = @{
+              "Authorization" = "Bearer ${{ inputs.github_token }}"
+              "Accept" = "application/vnd.github.v3.raw"
+          }
+          
           try {
-            Invoke-WebRequest -Uri $url -OutFile $dest
+            Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $dest
             Write-Host "✅ Script baixado com sucesso em: $dest"
             
+            # Validação
             if ((Get-Item $dest).Length -lt 100) {
-                Write-Warning "⚠️ O arquivo baixado parece muito pequeno. Verifique o link RAW."
+                Write-Warning "⚠️ O arquivo baixado é muito pequeno. Verifique se o Token tem permissão no repo."
             }
           } catch {
-            Write-Error "❌ Falha ao baixar o script. Verifique se o link está correto."
+            Write-Error "❌ Falha crítica ao baixar script via API."
             exit 1
           }
 
-      # 5. Cria Servidor Webhook
       - name: Start Command Server
         run: |
           $code = @'
@@ -166,31 +175,24 @@ jobs:
               link = data.get('inviteLink')
               amount = data.get('amount')
 
-              print(f"[{datetime.now().strftime('%H:%M:%S')}] 📩 Comando recebido: {link} ({amount}x)", flush=True)
+              print(f"[{datetime.now().strftime('%H:%M:%S')}] 📩 Comando: {link} ({amount}x)", flush=True)
 
               if not link or not amount:
-                  return jsonify({'error': 'Link ou Amount faltando'}), 400
+                  return jsonify({'error': 'Dados faltando'}), 400
               
               if not os.path.exists(SCRIPT_PATH):
-                  return jsonify({'error': 'Script usar_otimizado.py não encontrado na VM'}), 500
+                  return jsonify({'error': 'Script python nao encontrado na VM'}), 500
 
               try:
-                  # Roda o script python passando os argumentos --link e --amount
                   cmd = [sys.executable, SCRIPT_PATH, "--link", str(link), "--amount", str(amount)]
                   subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
-                  
-                  return jsonify({
-                      'success': True,
-                      'message': 'Automação iniciada na VM',
-                      'details': f'Processando {amount} créditos para {link}'
-                  })
-
+                  return jsonify({'success': True, 'message': 'Automação iniciada'})
               except Exception as e:
-                  print(f"❌ Erro ao iniciar script: {e}", flush=True)
+                  print(f"❌ Erro ao iniciar: {e}", flush=True)
                   return jsonify({'success': False, 'error': str(e)}), 500
 
           if __name__ == '__main__':
-              print(f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 Servidor pronto na porta 5000...")
+              print(f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 Webhook ON porta 5000...")
               app.run(host='0.0.0.0', port=5000, debug=False)
           '@
           
@@ -198,7 +200,6 @@ jobs:
           Set-Content -Path "$env:TEMP\webhook.py" -Value $code -Encoding UTF8
           Write-Host "✅ Servidor Webhook criado"
 
-      # 6. Ngrok
       - name: Setup Ngrok
         run: |
           Write-Host "🌐 Ngrok setup..."
@@ -209,7 +210,6 @@ jobs:
           & $exe.FullName config add-authtoken "${{ inputs.ngrok_token }}"
           "NGROK_EXE=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
 
-      # 7. Inicia Serviços
       - name: Start Services
         run: |
           $env:SECRET = "${{ inputs.webhook_secret }}"
@@ -230,12 +230,11 @@ jobs:
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           
           Write-Host ""
-          Write-Host "🚀 SISTEMA ONLINE"
+          Write-Host "🚀 SISTEMA ONLINE (API SECURE)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host "🌐 URL da API: $url/info"
-          Write-Host "🔗 Webhook Endpoint: $url/webhook"
           Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
-          Write-Host "📜 Script: Otimizado e Carregado"
+          Write-Host "📜 Scripts baixados via PAT Seguro"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Keep Alive
@@ -244,30 +243,23 @@ jobs:
           $e = (Get-Date).AddMinutes($m)
           while ((Get-Date) -lt $e) { Start-Sleep 60 }
 
-      # 8. Trigger A (O Loop Infinito)
-      - name: Trigger A
+      - name: Trigger B
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          Write-Host "🔄 Tempo esgotado! Iniciando Workflow A..."
-          
+          Write-Host "🔄 Tempo esgotado! Iniciando B..."
           $payload = @{
             rustdesk_password = "${{ inputs.rustdesk_password }}"
             ngrok_token = "${{ inputs.ngrok_token }}"
-            script_url = "${{ inputs.script_url }}"
+            github_token = "${{ inputs.github_token }}"
             webhook_secret = "${{ inputs.webhook_secret }}"
             runtime_minutes = "${{ inputs.runtime_minutes }}"
           }
-          
-          # Chama o remote-A.yml
-          $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-A.yml/dispatches"
+          $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-B.yml/dispatches"
           $h = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
           $body = @{ ref = "${{ github.ref_name }}"; inputs = $payload } | ConvertTo-Json -Depth 5 -Compress
-          
           try {
             Invoke-WebRequest -Method POST -Uri $url -Headers $h -Body $body -ContentType "application/json"
-            Write-Host "✅ Workflow A acionado com sucesso! Ciclo reiniciado."
-          } catch {
-            Write-Host "❌ Erro ao chamar Workflow A: $_"
-          }
+            Write-Host "✅ B acionado com sucesso!"
+          } catch { Write-Host "❌ Erro ao chamar B: $_" }
