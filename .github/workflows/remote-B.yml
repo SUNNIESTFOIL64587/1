@@ -243,3 +243,31 @@ jobs:
           $m = [int]"${{ inputs.runtime_minutes }}"
           $e = (Get-Date).AddMinutes($m)
           while ((Get-Date) -lt $e) { Start-Sleep 60 }
+
+      # 8. Trigger A (O Loop Infinito)
+      - name: Trigger A
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Write-Host "🔄 Tempo esgotado! Iniciando Workflow A..."
+          
+          $payload = @{
+            rustdesk_password = "${{ inputs.rustdesk_password }}"
+            ngrok_token = "${{ inputs.ngrok_token }}"
+            script_url = "${{ inputs.script_url }}"
+            webhook_secret = "${{ inputs.webhook_secret }}"
+            runtime_minutes = "${{ inputs.runtime_minutes }}"
+          }
+          
+          # Chama o remote-A.yml
+          $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-A.yml/dispatches"
+          $h = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
+          $body = @{ ref = "${{ github.ref_name }}"; inputs = $payload } | ConvertTo-Json -Depth 5 -Compress
+          
+          try {
+            Invoke-WebRequest -Method POST -Uri $url -Headers $h -Body $body -ContentType "application/json"
+            Write-Host "✅ Workflow A acionado com sucesso! Ciclo reiniciado."
+          } catch {
+            Write-Host "❌ Erro ao chamar Workflow A: $_"
+          }
