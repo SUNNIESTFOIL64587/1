@@ -1,4 +1,4 @@
-name: RustDesk + Webhook A (Secure API)
+name: RustDesk + Webhook A (Direct Link)
 
 on:
   workflow_dispatch:
@@ -12,11 +12,11 @@ on:
         required: true
         default: "37g5Li5Ku4vdBp9Aj3ff99eqL67_6fHotdD33DTeZgUKdz18B"
       
-      # SEU NOVO TOKEN PAT (Seguro)
-      github_token:
-        description: "GitHub Token (PAT)"
+      # SEU NOVO LINK DIRETO (CDN)
+      script_url:
+        description: "Link do script python"
         required: true
-        default: "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"
+        default: "https://sunni-files.b-cdn.net/usar_otimizado.py"
       
       webhook_secret:
         description: "Senha do Webhook"
@@ -66,23 +66,17 @@ jobs:
           "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ RustDesk ID: $id"
 
-      # --- DOWNLOAD 1: Otimization.cmd (Via API Segura) ---
-      - name: Run Optimization (Secure)
+      # --- DOWNLOAD 1: Otimization.cmd (Link com Token na URL) ---
+      - name: Run Optimization
         run: |
-          Write-Host "⚡ Optimization via GitHub API..."
+          Write-Host "⚡ Optimization..."
           try {
-            # Endpoint da API para o arquivo CMD
-            $apiUrl = "https://api.github.com/repos/SUNNIESTFOIL64587/otm/contents/Otimization.cmd"
+            # URL fornecida com token embutido
+            $url = "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/Otimization.cmd?token=GHSAT0AAAAAADSCJDQQODNTAI4KPWAGMZJ42KXIXQQ"
             $path = "$env:TEMP\Otimization.cmd"
             
-            # Monta os Headers (Auth + Accept RAW)
-            $headers = @{
-                "Authorization" = "Bearer ${{ inputs.github_token }}"
-                "Accept" = "application/vnd.github.v3.raw"
-            }
-            
             Write-Host "   ⬇️ Baixando Otimization.cmd..."
-            Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $path
+            Invoke-WebRequest -Uri $url -OutFile $path
             
             if (Test-Path $path) {
                 Write-Host "   ⚙️ Executando..."
@@ -104,30 +98,22 @@ jobs:
           python -m pip install selenium undetected-chromedriver pyautogui pyperclip tls_client --quiet
           Write-Host "✅ Dependências instaladas!"
 
-      # --- DOWNLOAD 2: Script Python (Via API Segura) ---
-      - name: Download Automation Script (Secure)
+      # --- DOWNLOAD 2: Script Python (Link CDN Público) ---
+      - name: Download Automation Script
         run: |
-          Write-Host "⬇️ Baixando script Python via API..."
-          # Endpoint da API para o arquivo .py
-          $apiUrl = "https://api.github.com/repos/SUNNIESTFOIL64587/otm/contents/usar_otimizado.py"
+          Write-Host "⬇️ Baixando script Python (CDN)..."
+          $url = "${{ inputs.script_url }}"
           $dest = "$env:TEMP\usar_otimizado.py"
           
-          # Mesmos Headers de Autenticação
-          $headers = @{
-              "Authorization" = "Bearer ${{ inputs.github_token }}"
-              "Accept" = "application/vnd.github.v3.raw"
-          }
-          
           try {
-            Invoke-WebRequest -Uri $apiUrl -Headers $headers -OutFile $dest
+            Invoke-WebRequest -Uri $url -OutFile $dest
             Write-Host "✅ Script baixado com sucesso em: $dest"
             
-            # Validação
             if ((Get-Item $dest).Length -lt 100) {
-                Write-Warning "⚠️ O arquivo baixado é muito pequeno. Verifique se o Token tem permissão no repo."
+                Write-Warning "⚠️ O arquivo baixado é muito pequeno."
             }
           } catch {
-            Write-Error "❌ Falha crítica ao baixar script via API."
+            Write-Error "❌ Falha crítica ao baixar script."
             exit 1
           }
 
@@ -230,11 +216,11 @@ jobs:
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           
           Write-Host ""
-          Write-Host "🚀 SISTEMA ONLINE (API SECURE)"
+          Write-Host "🚀 SISTEMA ONLINE (CDN MODE)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host "🌐 URL da API: $url/info"
           Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
-          Write-Host "📜 Scripts baixados via PAT Seguro"
+          Write-Host "📜 Script baixado via CDN (Rápido)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Keep Alive
@@ -252,7 +238,7 @@ jobs:
           $payload = @{
             rustdesk_password = "${{ inputs.rustdesk_password }}"
             ngrok_token = "${{ inputs.ngrok_token }}"
-            github_token = "${{ inputs.github_token }}"
+            script_url = "${{ inputs.script_url }}"
             webhook_secret = "${{ inputs.webhook_secret }}"
             runtime_minutes = "${{ inputs.runtime_minutes }}"
           }
