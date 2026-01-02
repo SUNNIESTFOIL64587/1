@@ -187,7 +187,6 @@ jobs:
               print(f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 Starting webhook server...")
               app.run(host='0.0.0.0', port=5000, debug=False)
           '@
-          # Remove indentação excessiva do Here-String antes de salvar
           $code = $code.Trim()
           Set-Content -Path "$env:TEMP\webhook.py" -Value $code -Encoding UTF8
           Write-Host "✅ Webhook server created"
@@ -198,7 +197,6 @@ jobs:
           $zip = "$env:TEMP\ngrok.zip"
           Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $zip
           Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ngrok" -Force
-          # Find executable recursively in case folder structure changes
           $exe = Get-ChildItem -Path "$env:TEMP\ngrok" -Filter "ngrok.exe" -Recurse | Select-Object -First 1
           if (-not $exe) { throw "Ngrok exe not found" }
           
@@ -216,25 +214,24 @@ jobs:
           Start-Process python -ArgumentList "$env:TEMP\webhook.py" -WindowStyle Hidden
           Start-Sleep 5
           
-          # Start Ngrok (Dynamic Domain for reliability)
+          # Start Ngrok (FIXED DOMAIN)
           $ngrok = "$env:NGROK_EXE"
-          # Usar http 5000 padrão. Se tiver dominio pago, adicione --domain=SEU_DOMINIO
-          Start-Process $ngrok -ArgumentList "http","5000" -WindowStyle Hidden
-          Start-Sleep 8
+          $domain = "debera-obese-interestedly.ngrok-free.dev"
           
-          # Get URL
-          $url = ""
-          for ($i = 1; $i -le 10; $i++) {
-            try {
+          Write-Host "🔗 Connecting to static domain: $domain"
+          Start-Process $ngrok -ArgumentList "http","--domain=$domain","5000" -WindowStyle Hidden
+          Start-Sleep 10
+          
+          # Health Check Tunnel
+          $url = "https://$domain"
+          try {
               $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
               if ($t.tunnels.Count -gt 0) { 
-                 $url = $t.tunnels[0].public_url
-                 break 
+                 Write-Host "✅ Tunnel verified via API"
               }
-            } catch { Start-Sleep 2 }
+          } catch { 
+              Write-Host "⚠️ Tunnel API check skipped, assuming static domain works." 
           }
-          
-          if (-not $url) { Write-Error "Failed to get Ngrok URL" }
 
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ Webhook URL: $url/webhook"
@@ -243,7 +240,7 @@ jobs:
         run: |
           Write-Host ""
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🅰️ WORKFLOW A - ONLINE"
+          Write-Host "🅰️ WORKFLOW A - ONLINE (STATIC DOMAIN)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
           Write-Host "🔑 RustDesk Pass: ${{ inputs.rustdesk_password }}"
@@ -285,13 +282,12 @@ jobs:
           
           $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-B.yml/dispatches"
           $h = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
-          # Ensure payload is wrapped in 'inputs' key
           $body = @{ ref = "${{ github.ref_name }}"; inputs = $payload } | ConvertTo-Json -Depth 5 -Compress
           
           try {
             Invoke-WebRequest -Method POST -Uri $url -Headers $h -Body $body -ContentType "application/json"
             Write-Host "✅ B triggered successfully"
           } catch {
-            Write-Host "❌ Failed to trigger B. Check if 'remote-B.yml' exists and has 'workflow_dispatch'."
+            Write-Host "❌ Failed to trigger B."
             Write-Host $_.Exception.Message
           }
