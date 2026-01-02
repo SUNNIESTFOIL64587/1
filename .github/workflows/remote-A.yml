@@ -1,4 +1,4 @@
-name: RustDesk + Webhook A (Direct Link)
+name: RustDesk + Webhook A (Desktop CLI)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
         required: true
         default: "37g5Li5Ku4vdBp9Aj3ff99eqL67_6fHotdD33DTeZgUKdz18B"
       
-      # SEU NOVO LINK DIRETO (CDN)
+      # SEU LINK DO CDN (PYTHON)
       script_url:
         description: "Link do script python"
         required: true
@@ -66,23 +66,24 @@ jobs:
           "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ RustDesk ID: $id"
 
-      # --- DOWNLOAD 1: Otimization.cmd (Link com Token na URL) ---
+      # --- DOWNLOAD 1: Otimização (Salva no Desktop) ---
       - name: Run Optimization
         run: |
-          Write-Host "⚡ Optimization..."
+          Write-Host "⚡ Optimization (Desktop)..."
           try {
-            # URL fornecida com token embutido
-            $url = "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/Otimization.cmd?token=GHSAT0AAAAAADSCJDQQODNTAI4KPWAGMZJ42KXIXQQ"
-            $path = "$env:TEMP\Otimization.cmd"
+            $url = "https://sunni-files.b-cdn.net/Otimization.cmd"
+            # Caminho atualizado para o Desktop
+            $path = "$env:USERPROFILE\Desktop\Otimization.cmd"
             
-            Write-Host "   ⬇️ Baixando Otimization.cmd..."
+            Write-Host "   ⬇️ Baixando para $path..."
             Invoke-WebRequest -Uri $url -OutFile $path
             
             if (Test-Path $path) {
                 Write-Host "   ⚙️ Executando..."
                 Start-Process cmd.exe -ArgumentList "/c `"$path`"" -Wait -NoNewWindow
                 Write-Host "✅ Otimização concluída"
-                Remove-Item $path -Force
+                # Opcional: Remove ou mantém o arquivo na área de trabalho
+                # Remove-Item $path -Force 
             } else {
                 Write-Error "❌ Falha ao baixar Otimization.cmd"
             }
@@ -94,16 +95,22 @@ jobs:
         run: |
           Write-Host "📦 Instalando bibliotecas..."
           python -m pip install --upgrade pip --quiet
+          
+          # Dependências do Webhook
           python -m pip install flask flask-cors requests --quiet
-          python -m pip install selenium undetected-chromedriver pyautogui pyperclip tls_client --quiet
+          
+          # Dependências do seu Script (Conforme solicitado)
+          python -m pip install undetected-chromedriver selenium pyperclip pyautogui tls-client --quiet
+          
           Write-Host "✅ Dependências instaladas!"
 
-      # --- DOWNLOAD 2: Script Python (Link CDN Público) ---
+      # --- DOWNLOAD 2: Script Python (Salva no Desktop) ---
       - name: Download Automation Script
         run: |
-          Write-Host "⬇️ Baixando script Python (CDN)..."
+          Write-Host "⬇️ Baixando script Python para Desktop..."
           $url = "${{ inputs.script_url }}"
-          $dest = "$env:TEMP\usar_otimizado.py"
+          # Caminho atualizado para o Desktop
+          $dest = "$env:USERPROFILE\Desktop\usar_otimizado.py"
           
           try {
             Invoke-WebRequest -Uri $url -OutFile $dest
@@ -131,7 +138,11 @@ jobs:
           CORS(app, resources={r"/*": {"origins": "*"}})
 
           SECRET = os.environ.get('SECRET', 'default')
-          SCRIPT_PATH = os.path.join(os.environ.get('TEMP'), 'usar_otimizado.py')
+          
+          # CAMINHO DO SCRIPT NO DESKTOP
+          DESKTOP_PATH = os.path.join(os.environ['USERPROFILE'], 'Desktop')
+          SCRIPT_PATH = os.path.join(DESKTOP_PATH, 'usar_otimizado.py')
+          
           RD_ID = os.environ.get('RUSTDESK_ID', 'N/A')
           RD_PASS = os.environ.get('RUSTDESK_PASSWORD', 'N/A')
 
@@ -164,15 +175,29 @@ jobs:
               print(f"[{datetime.now().strftime('%H:%M:%S')}] 📩 Comando: {link} ({amount}x)", flush=True)
 
               if not link or not amount:
-                  return jsonify({'error': 'Dados faltando'}), 400
+                  return jsonify({'error': 'Dados faltando (inviteLink ou amount)'}), 400
               
               if not os.path.exists(SCRIPT_PATH):
-                  return jsonify({'error': 'Script python nao encontrado na VM'}), 500
+                  return jsonify({'error': 'Script usar_otimizado.py não encontrado no Desktop'}), 500
 
               try:
-                  cmd = [sys.executable, SCRIPT_PATH, "--link", str(link), "--amount", str(amount)]
-                  subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
-                  return jsonify({'success': True, 'message': 'Automação iniciada'})
+                  # MONTA O COMANDO EXATO: python usar_otimizado.py --link "URL" --amount 50
+                  cmd = [
+                      sys.executable, 
+                      SCRIPT_PATH, 
+                      "--link", str(link), 
+                      "--amount", str(amount)
+                  ]
+                  
+                  # Executa definindo o Desktop como diretório de trabalho (cwd)
+                  # Isso garante que logs ou arquivos gerados fiquem no Desktop
+                  subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE, cwd=DESKTOP_PATH)
+                  
+                  return jsonify({
+                      'success': True, 
+                      'message': 'Automação iniciada',
+                      'command': f'python usar_otimizado.py --amount {amount}'
+                  })
               except Exception as e:
                   print(f"❌ Erro ao iniciar: {e}", flush=True)
                   return jsonify({'success': False, 'error': str(e)}), 500
@@ -216,11 +241,11 @@ jobs:
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           
           Write-Host ""
-          Write-Host "🚀 SISTEMA ONLINE (CDN MODE)"
+          Write-Host "🚀 SISTEMA ONLINE (DESKTOP MODE)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host "🌐 URL da API: $url/info"
           Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
-          Write-Host "📜 Script baixado via CDN (Rápido)"
+          Write-Host "📂 Arquivos salvos em: Desktop"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Keep Alive
