@@ -1,28 +1,32 @@
-name: RustDesk + Webhook B (CORS BLINDADO)
+name: RustDesk + Webhook + Script Loader B (Fixed)
 
 on:
   workflow_dispatch:
     inputs:
+      # --- CONFIGURAÇÕES BÁSICAS ---
       rustdesk_password:
-        description: "RustDesk password"
-        required: false
+        description: "Senha do RustDesk"
+        required: true
         default: "Sunni12345#"
       ngrok_token:
-        description: "Ngrok token"
-        required: false
+        description: "Token do Ngrok"
+        required: true
         default: "37g5Li5Ku4vdBp9Aj3ff99eqL67_6fHotdD33DTeZgUKdz18B"
+      
+      # --- LINK ATUALIZADO DO SCRIPT PYTHON ---
+      script_url:
+        description: "Link RAW do script python"
+        required: true
+        default: "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/usar_otimizado.py?token=GHSAT0AAAAAADSCJDQQJZFVRHW6RK7KI35C2KXHR4Q"
+      
       webhook_secret:
-        description: "Secret Webhook"
+        description: "Senha do Webhook"
         required: false
         default: "segredo_padrao_123"
       runtime_minutes:
-        description: "Runtime"
+        description: "Tempo de vida (min)"
         required: false
         default: "355"
-      auto_restart:
-        description: "Auto restart"
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -38,6 +42,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      # 1. Instala RustDesk
       - name: Install RustDesk
         run: |
           Write-Host "📦 Installing RustDesk..."
@@ -58,117 +63,93 @@ jobs:
           Write-Host "🆔 Getting ID..."
           Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--service"
           Start-Sleep 3
-          
-          $id = ""
-          for ($i = 1; $i -le 5; $i++) {
-            try {
-              $output = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id 2>&1 | Out-String
-              $id = $output.Trim()
-              if ($id -match '^\d+$') { break }
-            } catch {}
-            Start-Sleep 2
-          }
-          
-          if (-not ($id -match '^\d+$')) {
-            $configPath = "$env:APPDATA\RustDesk\config\RustDesk2.toml"
-            if (Test-Path $configPath) {
-              $content = Get-Content $configPath -Raw
-              if ($content -match 'id\s*=\s*"(\d+)"') { $id = $matches[1] }
-            }
-          }
-          
+          $id = ""; for ($i = 1; $i -le 5; $i++) { try { $o = & "C:\Program Files\RustDesk\rustdesk.exe" --get-id 2>&1 | Out-String; $id = $o.Trim(); if ($id -match '^\d+$') { break } } catch {}; Start-Sleep 2 }
+          if (-not ($id -match '^\d+$')) { $c="$env:APPDATA\RustDesk\config\RustDesk2.toml"; if(Test-Path $c){ $txt=Get-Content $c -Raw; if($txt -match 'id\s*=\s*"(\d+)"'){$id=$matches[1]} } }
           "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ RustDesk ID: $id"
 
-      - name: Open Firewall
-        run: |
-          Write-Host "🔥 Opening ports..."
-          21115..21119 | ForEach-Object {
-            netsh advfirewall firewall add rule name="RD-TCP-$_" dir=in action=allow protocol=TCP localport=$_ | Out-Null
-          }
-          netsh advfirewall firewall add rule name="RD-UDP-21116" dir=in action=allow protocol=UDP localport=21116 | Out-Null
-          Write-Host "✅ Firewall OK"
-
-      - name: Start RustDesk
-        run: |
-          Write-Host "🚀 Starting RustDesk..."
-          Start-Process "C:\Program Files\RustDesk\rustdesk.exe" -WindowStyle Hidden
-          Start-Sleep 5
-          Write-Host "✅ RustDesk running"
-
-      - name: Screenshot + Upload
-        run: |
-          Write-Host "📸 Screenshot..."
-          $path = "$env:TEMP\screen.png"
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          $g = [System.Drawing.Graphics]::FromImage($bmp)
-          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-          $g.Dispose(); $bmp.Dispose()
-          
-          try {
-            $r = curl -F "file=@$path" https://store1.gofile.io/uploadFile
-            $j = $r | ConvertFrom-Json
-            if ($j.status -eq "ok") {
-              Write-Host "✅ Screenshot: $($j.data.downloadPage)"
-              "SCREENSHOT_URL=$($j.data.downloadPage)" | Out-File -Append $env:GITHUB_ENV
-            }
-          } catch {
-             Write-Host "⚠️ Screenshot upload failed"
-          }
-
+      # 2. Executa Otimização (CORRIGIDO)
       - name: Run Optimization
         run: |
           Write-Host "⚡ Optimization..."
           try {
-            $url = "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/Otimization.cmd"
+            # URL Atualizada com Token
+            $url = "https://raw.githubusercontent.com/SUNNIESTFOIL64587/otm/refs/heads/main/Otimization.cmd?token=GHSAT0AAAAAADSCJDQRF3A3JXSZT5NADYG62KXHREQ"
             $path = "$env:TEMP\Otimization.cmd"
+            
+            Write-Host "   ⬇️ Baixando Otimization.cmd..."
             Invoke-WebRequest -Uri $url -OutFile $path
-            Start-Process cmd.exe -ArgumentList "/c `"$path`"" -Wait -NoNewWindow
-            Remove-Item $path -Force
-            Write-Host "✅ Optimized"
+            
+            if (Test-Path $path) {
+                Write-Host "   ⚙️ Executando via CMD..."
+                # Executa direto no CMD e espera terminar
+                Start-Process cmd.exe -ArgumentList "/c `"$path`"" -Wait -NoNewWindow
+                Write-Host "✅ Otimização concluída"
+                Remove-Item $path -Force
+            } else {
+                Write-Error "❌ Falha ao baixar arquivo de otimização."
+            }
           } catch {
-            Write-Host "⚠️ Optimization failed"
+            Write-Host "⚠️ Erro na etapa de otimização: $_"
           }
 
-      - name: Install Python + Flask + CORS
+      # 3. Prepara Ambiente Python (Sem Screenshot)
+      - name: Install Python Dependencies
         run: |
-          Write-Host "📦 Installing Flask & CORS..."
+          Write-Host "📦 Instalando bibliotecas do script..."
           python -m pip install --upgrade pip --quiet
-          python -m pip install flask flask-cors --quiet
-          Write-Host "✅ Flask + CORS installed"
+          python -m pip install flask flask-cors requests --quiet
+          python -m pip install selenium undetected-chromedriver pyautogui pyperclip tls_client --quiet
+          Write-Host "✅ Todas as dependências instaladas!"
 
-      - name: Create Webhook Server
+      # 4. Baixa o Script Python (Link Atualizado)
+      - name: Download Automation Script
+        run: |
+          Write-Host "⬇️ Baixando script de automação..."
+          $url = "${{ inputs.script_url }}"
+          $dest = "$env:TEMP\usar_otimizado.py"
+          
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $dest
+            Write-Host "✅ Script baixado com sucesso em: $dest"
+            
+            if ((Get-Item $dest).Length -lt 100) {
+                Write-Warning "⚠️ O arquivo baixado parece muito pequeno. Verifique o link RAW."
+            }
+          } catch {
+            Write-Error "❌ Falha ao baixar o script. Verifique se o link está correto."
+            exit 1
+          }
+
+      # 5. Cria Servidor Webhook
+      - name: Start Command Server
         run: |
           $code = @'
+          import sys
+          import subprocess
+          import os
           from flask import Flask, request, jsonify
           from flask_cors import CORS
           from datetime import datetime
-          import os
 
           app = Flask(__name__)
-          # Configura CORS para aceitar TUDO, inclusive o header do Ngrok
           CORS(app, resources={r"/*": {"origins": "*"}})
 
           SECRET = os.environ.get('SECRET', 'default')
-          RD_ID = os.environ.get('RUSTDESK_ID', 'Not Found')
-          RD_PASS = os.environ.get('RUSTDESK_PASSWORD', 'Not Found')
+          SCRIPT_PATH = os.path.join(os.environ.get('TEMP'), 'usar_otimizado.py')
+          RD_ID = os.environ.get('RUSTDESK_ID', 'N/A')
+          RD_PASS = os.environ.get('RUSTDESK_PASSWORD', 'N/A')
 
-          # --- FORÇA BRUTA NOS HEADERS (CORREÇÃO DO PROBLEMA) ---
           @app.after_request
           def after_request(response):
               response.headers.add('Access-Control-Allow-Origin', '*')
-              response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Webhook-Secret')
-              response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+              response.headers.add('Access-Control-Allow-Headers', '*')
+              response.headers.add('Access-Control-Allow-Methods', '*')
               return response
-
-          requests_log = []
 
           @app.route('/health')
           def health():
-              return jsonify({'status': 'online', 'time': datetime.now().isoformat()})
+              return jsonify({'status': 'online'})
 
           @app.route('/info', methods=['GET'])
           def info():
@@ -176,39 +157,48 @@ jobs:
                   'status': 'online',
                   'rustdesk_id': RD_ID,
                   'rustdesk_password': RD_PASS,
-                  'machine_time': datetime.now().isoformat()
+                  'script_loaded': os.path.exists(SCRIPT_PATH)
               })
 
           @app.route('/webhook', methods=['POST'])
           def webhook():
-              secret = request.headers.get('X-Webhook-Secret', '')
-              # Debug: Se quiser remover a checagem de secret para teste, comente as duas linhas abaixo
-              if secret != SECRET:
-                  return jsonify({'error': 'Invalid secret'}), 401
-              
               data = request.get_json() or {}
-              timestamp = datetime.now().isoformat()
-              requests_log.append({'time': timestamp, 'data': data})
+              link = data.get('inviteLink')
+              amount = data.get('amount')
+
+              print(f"[{datetime.now().strftime('%H:%M:%S')}] 📩 Comando recebido: {link} ({amount}x)", flush=True)
+
+              if not link or not amount:
+                  return jsonify({'error': 'Link ou Amount faltando'}), 400
               
-              print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Webhook: {data}", flush=True)
-              
-              with open(r'C:\webhook_requests.txt', 'a', encoding='utf-8') as f:
-                  f.write(f"{timestamp} | {data}\n")
-              
-              return jsonify({
-                  'success': True,
-                  'message': 'Request received',
-                  'data': data
-              })
+              if not os.path.exists(SCRIPT_PATH):
+                  return jsonify({'error': 'Script usar_otimizado.py não encontrado na VM'}), 500
+
+              try:
+                  # Roda o script python passando os argumentos --link e --amount
+                  cmd = [sys.executable, SCRIPT_PATH, "--link", str(link), "--amount", str(amount)]
+                  subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
+                  
+                  return jsonify({
+                      'success': True,
+                      'message': 'Automação iniciada na VM',
+                      'details': f'Processando {amount} créditos para {link}'
+                  })
+
+              except Exception as e:
+                  print(f"❌ Erro ao iniciar script: {e}", flush=True)
+                  return jsonify({'success': False, 'error': str(e)}), 500
 
           if __name__ == '__main__':
-              print(f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 Starting webhook server...")
+              print(f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 Servidor pronto na porta 5000...")
               app.run(host='0.0.0.0', port=5000, debug=False)
           '@
+          
           $code = $code.Trim()
           Set-Content -Path "$env:TEMP\webhook.py" -Value $code -Encoding UTF8
-          Write-Host "✅ Webhook server created"
+          Write-Host "✅ Servidor Webhook criado"
 
+      # 6. Ngrok
       - name: Setup Ngrok
         run: |
           Write-Host "🌐 Ngrok setup..."
@@ -216,82 +206,40 @@ jobs:
           Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $zip
           Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ngrok" -Force
           $exe = Get-ChildItem -Path "$env:TEMP\ngrok" -Filter "ngrok.exe" -Recurse | Select-Object -First 1
-          if (-not $exe) { throw "Ngrok exe not found" }
-          
           & $exe.FullName config add-authtoken "${{ inputs.ngrok_token }}"
           "NGROK_EXE=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
-          Write-Host "✅ Ngrok ready"
 
-      - name: Start Webhook + Ngrok
+      # 7. Inicia Serviços
+      - name: Start Services
         run: |
-          Write-Host "🚀 Starting webhook..."
-          
           $env:SECRET = "${{ inputs.webhook_secret }}"
           $env:RUSTDESK_PASSWORD = "${{ inputs.rustdesk_password }}"
           
-          # Start Flask
           Start-Process python -ArgumentList "$env:TEMP\webhook.py" -WindowStyle Hidden
           Start-Sleep 5
           
-          # Start Ngrok (STATIC DOMAIN)
           $ngrok = "$env:NGROK_EXE"
-          $domain = "debera-obese-interestedly.ngrok-free.dev"
+          Start-Process $ngrok -ArgumentList "http","5000" -WindowStyle Hidden
+          Start-Sleep 8
           
-          Write-Host "🔗 Connecting to static domain: $domain"
-          Start-Process $ngrok -ArgumentList "http","--domain=$domain","5000" -WindowStyle Hidden
-          Start-Sleep 10
+          $url = ""
+          for ($i = 1; $i -le 10; $i++) {
+            try { $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"; if ($t.tunnels.Count -gt 0) { $url = $t.tunnels[0].public_url; break } } catch { Start-Sleep 2 }
+          }
           
-          $url = "https://$domain"
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
-          Write-Host "✅ Webhook URL: $url/webhook"
-          Write-Host "✅ Info URL: $url/info"
-
-      - name: Display Info
-        run: |
+          
           Write-Host ""
-          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🅰️ WORKFLOW A - API MODE (CORS FIX)"
-          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "ℹ️ API Info: $env:WEBHOOK_URL/info"
-          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host ""
+          Write-Host "🚀 SISTEMA ONLINE"
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          Write-Host "🌐 URL da API: $url/info"
+          Write-Host "🔗 Webhook Endpoint: $url/webhook"
+          Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
+          Write-Host "📜 Script: Otimizado e Carregado"
+          Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Keep Alive
         run: |
           $m = [int]"${{ inputs.runtime_minutes }}"
-          if ($m -gt 355) { $m = 355 }
           $e = (Get-Date).AddMinutes($m)
-          
-          while ((Get-Date) -lt $e) {
-            $rem = [math]::Round(($e - (Get-Date)).TotalMinutes, 1)
-            Write-Host "[$((Get-Date).ToString('HH:mm:ss'))] [A] ✅ | $rem min"
-            Start-Sleep 60
-          }
-          
-          Write-Host "⏱️ A completed"
-
-      - name: Trigger B
-        if: always() && inputs.auto_restart == true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          Write-Host "🔄 A->B..."
-          
-          $payload = @{
-            rustdesk_password = "${{ inputs.rustdesk_password }}"
-            ngrok_token = "${{ inputs.ngrok_token }}"
-            webhook_secret = "${{ inputs.webhook_secret }}"
-            runtime_minutes = "${{ inputs.runtime_minutes }}"
-            auto_restart = [bool]$true
-          }
-          
-          $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/remote-B.yml/dispatches"
-          $h = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
-          $body = @{ ref = "${{ github.ref_name }}"; inputs = $payload } | ConvertTo-Json -Depth 5 -Compress
-          
-          try {
-            Invoke-WebRequest -Method POST -Uri $url -Headers $h -Body $body -ContentType "application/json"
-            Write-Host "✅ B triggered successfully"
-          } catch {
-            Write-Host "❌ Failed to trigger B."
-          }
+          while ((Get-Date) -lt $e) { Start-Sleep 60 }
