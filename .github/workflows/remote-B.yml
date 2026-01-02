@@ -1,4 +1,4 @@
-name: RustDesk + Webhook B (API + CORS)
+name: RustDesk + Webhook B (CORS BLINDADO)
 
 on:
   workflow_dispatch:
@@ -137,7 +137,6 @@ jobs:
         run: |
           Write-Host "📦 Installing Flask & CORS..."
           python -m pip install --upgrade pip --quiet
-          # AQUI ESTA A MUDANCA IMPORTANTE PARA O LOVABLE:
           python -m pip install flask flask-cors --quiet
           Write-Host "✅ Flask + CORS installed"
 
@@ -150,14 +149,20 @@ jobs:
           import os
 
           app = Flask(__name__)
-          # AQUI LIBERA O ACESSO DO LOVABLE:
-          CORS(app)
-          
+          # Configura CORS para aceitar TUDO, inclusive o header do Ngrok
+          CORS(app, resources={r"/*": {"origins": "*"}})
+
           SECRET = os.environ.get('SECRET', 'default')
-          
-          # Pega credenciais do ambiente
           RD_ID = os.environ.get('RUSTDESK_ID', 'Not Found')
           RD_PASS = os.environ.get('RUSTDESK_PASSWORD', 'Not Found')
+
+          # --- FORÇA BRUTA NOS HEADERS (CORREÇÃO DO PROBLEMA) ---
+          @app.after_request
+          def after_request(response):
+              response.headers.add('Access-Control-Allow-Origin', '*')
+              response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Webhook-Secret')
+              response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+              return response
 
           requests_log = []
 
@@ -165,7 +170,6 @@ jobs:
           def health():
               return jsonify({'status': 'online', 'time': datetime.now().isoformat()})
 
-          # Rota para o Dashboard pegar ID e Senha
           @app.route('/info', methods=['GET'])
           def info():
               return jsonify({
@@ -178,19 +182,13 @@ jobs:
           @app.route('/webhook', methods=['POST'])
           def webhook():
               secret = request.headers.get('X-Webhook-Secret', '')
+              # Debug: Se quiser remover a checagem de secret para teste, comente as duas linhas abaixo
               if secret != SECRET:
                   return jsonify({'error': 'Invalid secret'}), 401
               
               data = request.get_json() or {}
               timestamp = datetime.now().isoformat()
-              
-              log_entry = {
-                  'time': timestamp,
-                  'data': data
-              }
-              requests_log.append(log_entry)
-              if len(requests_log) > 50:
-                  requests_log.pop(0)
+              requests_log.append({'time': timestamp, 'data': data})
               
               print(f"[{datetime.now().strftime('%H:%M:%S')}] ✅ Webhook: {data}", flush=True)
               
@@ -229,7 +227,6 @@ jobs:
           Write-Host "🚀 Starting webhook..."
           
           $env:SECRET = "${{ inputs.webhook_secret }}"
-          # Passamos a senha explicitamente para o ambiente do Python
           $env:RUSTDESK_PASSWORD = "${{ inputs.rustdesk_password }}"
           
           # Start Flask
@@ -253,10 +250,9 @@ jobs:
         run: |
           Write-Host ""
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🅰️ WORKFLOW A - API MODE ONLINE"
+          Write-Host "🅰️ WORKFLOW A - API MODE (CORS FIX)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host "ℹ️ API Info: $env:WEBHOOK_URL/info"
-          Write-Host "   (Acesse esse link para ver ID e Senha)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host ""
 
