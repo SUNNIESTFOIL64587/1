@@ -1,4 +1,4 @@
-name: RustDesk + Webhook A (Desktop CLI)
+name: RustDesk + Webhook A (Desktop Order Fixed)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,6 @@ on:
         required: true
         default: "37g5Li5Ku4vdBp9Aj3ff99eqL67_6fHotdD33DTeZgUKdz18B"
       
-      # SEU LINK DO CDN (PYTHON)
       script_url:
         description: "Link do script python"
         required: true
@@ -41,6 +40,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      # 1. Instala RustDesk (Prioridade Máxima)
       - name: Install RustDesk
         run: |
           Write-Host "📦 Installing RustDesk..."
@@ -66,13 +66,54 @@ jobs:
           "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ RustDesk ID: $id"
 
-      # --- DOWNLOAD 1: Otimização (Salva no Desktop) ---
-      - name: Run Optimization
+      # 2. SETUP E START DO NGROK (AGORA VEM ANTES DE TUDO)
+      - name: Setup & Start Ngrok
+        run: |
+          Write-Host "🌐 Ngrok setup..."
+          $zip = "$env:TEMP\ngrok.zip"
+          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ngrok" -Force
+          $exe = Get-ChildItem -Path "$env:TEMP\ngrok" -Filter "ngrok.exe" -Recurse | Select-Object -First 1
+          
+          # Configura Token
+          & $exe.FullName config add-authtoken "${{ inputs.ngrok_token }}"
+          
+          # Inicia Ngrok na porta 5000 (Onde o Python vai rodar depois)
+          Write-Host "🚀 Iniciando Túnel Ngrok..."
+          Start-Process $exe.FullName -ArgumentList "http","5000" -WindowStyle Hidden
+          
+          # Espera 15 segundos para garantir que conectou (Correção do erro de URL vazia)
+          Start-Sleep 15
+          
+          # Pega a URL Pública
+          $url = ""
+          for ($i = 1; $i -le 10; $i++) {
+            try { 
+                $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
+                if ($t.tunnels.Count -gt 0) { 
+                    $url = $t.tunnels[0].public_url
+                    break 
+                }
+            } catch { 
+                Write-Host "   ⏳ Tentando pegar URL ($i/10)..."
+                Start-Sleep 2 
+            }
+          }
+
+          if (-not $url) { Write-Warning "⚠️ Não foi possível pegar a URL do Ngrok agora. Verifique os logs depois." }
+          
+          # Salva para usar nos próximos passos
+          "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
+          "NGROK_EXE=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
+          
+          Write-Host "✅ Ngrok Ativo: $url"
+
+      # 3. Optimization (Agora roda DEPOIS do Ngrok estar garantido)
+      - name: Run Optimization (Desktop)
         run: |
           Write-Host "⚡ Optimization (Desktop)..."
           try {
             $url = "https://sunni-files.b-cdn.net/Otimization.cmd"
-            # Caminho atualizado para o Desktop
             $path = "$env:USERPROFILE\Desktop\Otimization.cmd"
             
             Write-Host "   ⬇️ Baixando para $path..."
@@ -82,8 +123,6 @@ jobs:
                 Write-Host "   ⚙️ Executando..."
                 Start-Process cmd.exe -ArgumentList "/c `"$path`"" -Wait -NoNewWindow
                 Write-Host "✅ Otimização concluída"
-                # Opcional: Remove ou mantém o arquivo na área de trabalho
-                # Remove-Item $path -Force 
             } else {
                 Write-Error "❌ Falha ao baixar Otimization.cmd"
             }
@@ -91,25 +130,20 @@ jobs:
             Write-Host "⚠️ Erro otimização: $_"
           }
 
+      # 4. Instala Dependências Python
       - name: Install Python Dependencies
         run: |
           Write-Host "📦 Instalando bibliotecas..."
           python -m pip install --upgrade pip --quiet
-          
-          # Dependências do Webhook
           python -m pip install flask flask-cors requests --quiet
-          
-          # Dependências do seu Script (Conforme solicitado)
           python -m pip install undetected-chromedriver selenium pyperclip pyautogui tls-client --quiet
-          
           Write-Host "✅ Dependências instaladas!"
 
-      # --- DOWNLOAD 2: Script Python (Salva no Desktop) ---
+      # 5. Baixa Script Principal para o Desktop
       - name: Download Automation Script
         run: |
           Write-Host "⬇️ Baixando script Python para Desktop..."
           $url = "${{ inputs.script_url }}"
-          # Caminho atualizado para o Desktop
           $dest = "$env:USERPROFILE\Desktop\usar_otimizado.py"
           
           try {
@@ -124,7 +158,8 @@ jobs:
             exit 1
           }
 
-      - name: Start Command Server
+      # 6. Cria o Servidor Webhook (Código)
+      - name: Create Webhook Server Code
         run: |
           $code = @'
           import sys
@@ -181,7 +216,6 @@ jobs:
                   return jsonify({'error': 'Script usar_otimizado.py não encontrado no Desktop'}), 500
 
               try:
-                  # MONTA O COMANDO EXATO: python usar_otimizado.py --link "URL" --amount 50
                   cmd = [
                       sys.executable, 
                       SCRIPT_PATH, 
@@ -189,8 +223,7 @@ jobs:
                       "--amount", str(amount)
                   ]
                   
-                  # Executa definindo o Desktop como diretório de trabalho (cwd)
-                  # Isso garante que logs ou arquivos gerados fiquem no Desktop
+                  # Executa no Desktop
                   subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE, cwd=DESKTOP_PATH)
                   
                   return jsonify({
@@ -209,43 +242,23 @@ jobs:
           
           $code = $code.Trim()
           Set-Content -Path "$env:TEMP\webhook.py" -Value $code -Encoding UTF8
-          Write-Host "✅ Servidor Webhook criado"
+          Write-Host "✅ Código do Webhook gerado."
 
-      - name: Setup Ngrok
-        run: |
-          Write-Host "🌐 Ngrok setup..."
-          $zip = "$env:TEMP\ngrok.zip"
-          Invoke-WebRequest -Uri "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath "$env:TEMP\ngrok" -Force
-          $exe = Get-ChildItem -Path "$env:TEMP\ngrok" -Filter "ngrok.exe" -Recurse | Select-Object -First 1
-          & $exe.FullName config add-authtoken "${{ inputs.ngrok_token }}"
-          "NGROK_EXE=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
-
-      - name: Start Services
+      # 7. Inicia o Webhook (Último passo)
+      - name: Start Webhook Server
         run: |
           $env:SECRET = "${{ inputs.webhook_secret }}"
           $env:RUSTDESK_PASSWORD = "${{ inputs.rustdesk_password }}"
           
+          # Inicia o Python (O Ngrok já está rodando desde o passo 2)
           Start-Process python -ArgumentList "$env:TEMP\webhook.py" -WindowStyle Hidden
-          Start-Sleep 5
-          
-          $ngrok = "$env:NGROK_EXE"
-          Start-Process $ngrok -ArgumentList "http","5000" -WindowStyle Hidden
-          Start-Sleep 8
-          
-          $url = ""
-          for ($i = 1; $i -le 10; $i++) {
-            try { $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"; if ($t.tunnels.Count -gt 0) { $url = $t.tunnels[0].public_url; break } } catch { Start-Sleep 2 }
-          }
-          
-          "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           
           Write-Host ""
-          Write-Host "🚀 SISTEMA ONLINE (DESKTOP MODE)"
+          Write-Host "🚀 SISTEMA PRONTO (ORDEM CORRIGIDA)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🌐 URL da API: $url/info"
+          Write-Host "🌐 URL da API: $env:WEBHOOK_URL/info"
           Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
-          Write-Host "📂 Arquivos salvos em: Desktop"
+          Write-Host "📂 Script: Desktop\usar_otimizado.py"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Keep Alive
