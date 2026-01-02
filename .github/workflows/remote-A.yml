@@ -1,25 +1,26 @@
-name: RustDesk + Webhook A
+name: RustDesk + Webhook A (Auto)
 
 on:
   workflow_dispatch:
     inputs:
       rustdesk_password:
         description: "RustDesk password"
-        required: true
-        default: "SUNNI12345#"
+        required: false
+        default: "Sunni12345#"
       ngrok_token:
-        description: "Ngrok token (Authtoken)"
-        required: true
+        description: "Ngrok token"
+        required: false
+        default: "37g5Li5Ku4vdBp9Aj3ff99eqL67_6fHotdD33DTeZgUKdz18B"
       webhook_secret:
-        description: "Secret para validar webhooks"
-        required: true
-        default: "meu_secret_123"
+        description: "Secret Webhook"
+        required: false
+        default: "segredo_padrao_123"
       runtime_minutes:
-        description: "Runtime (max 355)"
+        description: "Runtime"
         required: false
         default: "355"
       auto_restart:
-        description: "Auto restart A->B"
+        description: "Auto restart"
         type: boolean
         default: true
 
@@ -50,7 +51,7 @@ jobs:
           Write-Host "🔧 Setting password..."
           & "C:\Program Files\RustDesk\rustdesk.exe" --password "${{ inputs.rustdesk_password }}" 2>$null
           Start-Sleep 5
-          Write-Host "✅ Password set"
+          Write-Host "✅ Password set to: ${{ inputs.rustdesk_password }}"
 
       - name: Get RustDesk ID
         run: |
@@ -202,7 +203,7 @@ jobs:
           
           & $exe.FullName config add-authtoken "${{ inputs.ngrok_token }}"
           "NGROK_EXE=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
-          Write-Host "✅ Ngrok ready at $($exe.FullName)"
+          Write-Host "✅ Ngrok ready"
 
       - name: Start Webhook + Ngrok
         run: |
@@ -214,7 +215,7 @@ jobs:
           Start-Process python -ArgumentList "$env:TEMP\webhook.py" -WindowStyle Hidden
           Start-Sleep 5
           
-          # Start Ngrok (FIXED DOMAIN)
+          # Start Ngrok (STATIC DOMAIN)
           $ngrok = "$env:NGROK_EXE"
           $domain = "debera-obese-interestedly.ngrok-free.dev"
           
@@ -222,17 +223,7 @@ jobs:
           Start-Process $ngrok -ArgumentList "http","--domain=$domain","5000" -WindowStyle Hidden
           Start-Sleep 10
           
-          # Health Check Tunnel
           $url = "https://$domain"
-          try {
-              $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
-              if ($t.tunnels.Count -gt 0) { 
-                 Write-Host "✅ Tunnel verified via API"
-              }
-          } catch { 
-              Write-Host "⚠️ Tunnel API check skipped, assuming static domain works." 
-          }
-
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ Webhook URL: $url/webhook"
 
@@ -240,14 +231,13 @@ jobs:
         run: |
           Write-Host ""
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          Write-Host "🅰️ WORKFLOW A - ONLINE (STATIC DOMAIN)"
+          Write-Host "🅰️ WORKFLOW A - ONLINE (HARDCODED)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
           Write-Host "🔑 RustDesk Pass: ${{ inputs.rustdesk_password }}"
           Write-Host "🌐 Webhook URL: $env:WEBHOOK_URL/webhook"
           Write-Host "🔐 Webhook Secret: ${{ inputs.webhook_secret }}"
           Write-Host "📸 Screenshot: $env:SCREENSHOT_URL"
-          Write-Host "📝 Requests saved to: C:\webhook_requests.txt"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host ""
 
@@ -259,7 +249,7 @@ jobs:
           
           while ((Get-Date) -lt $e) {
             $rem = [math]::Round(($e - (Get-Date)).TotalMinutes, 1)
-            Write-Host "[$((Get-Date).ToString('HH:mm:ss'))] [A] ✅ | $rem min | RD: $env:RUSTDESK_ID | URL: $env:WEBHOOK_URL"
+            Write-Host "[$((Get-Date).ToString('HH:mm:ss'))] [A] ✅ | $rem min"
             Start-Sleep 60
           }
           
@@ -289,5 +279,4 @@ jobs:
             Write-Host "✅ B triggered successfully"
           } catch {
             Write-Host "❌ Failed to trigger B."
-            Write-Host $_.Exception.Message
           }
