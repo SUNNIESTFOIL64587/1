@@ -1,4 +1,4 @@
-name: RustDesk + Webhook A (API Mode)
+name: RustDesk + Webhook A (API + CORS)
 
 on:
   workflow_dispatch:
@@ -133,21 +133,26 @@ jobs:
             Write-Host "⚠️ Optimization failed"
           }
 
-      - name: Install Python + Flask
+      - name: Install Python + Flask + CORS
         run: |
-          Write-Host "📦 Installing Flask..."
+          Write-Host "📦 Installing Flask & CORS..."
           python -m pip install --upgrade pip --quiet
-          python -m pip install flask --quiet
-          Write-Host "✅ Flask installed"
+          # AQUI ESTA A MUDANCA IMPORTANTE PARA O LOVABLE:
+          python -m pip install flask flask-cors --quiet
+          Write-Host "✅ Flask + CORS installed"
 
       - name: Create Webhook Server
         run: |
           $code = @'
           from flask import Flask, request, jsonify
+          from flask_cors import CORS
           from datetime import datetime
           import os
 
           app = Flask(__name__)
+          # AQUI LIBERA O ACESSO DO LOVABLE:
+          CORS(app)
+          
           SECRET = os.environ.get('SECRET', 'default')
           
           # Pega credenciais do ambiente
@@ -160,7 +165,7 @@ jobs:
           def health():
               return jsonify({'status': 'online', 'time': datetime.now().isoformat()})
 
-          # NOVA ROTA: Retorna as credenciais para o seu Frontend/Agent
+          # Rota para o Dashboard pegar ID e Senha
           @app.route('/info', methods=['GET'])
           def info():
               return jsonify({
