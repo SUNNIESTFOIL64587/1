@@ -1,4 +1,4 @@
-name: RustDesk + Webhook B (Desktop Order Fixed)
+name: RustDesk + Webhook B (Fixed Domain + CMD)
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # 1. Instala RustDesk (Prioridade Máxima)
+      # 1. Instala RustDesk
       - name: Install RustDesk
         run: |
           Write-Host "📦 Installing RustDesk..."
@@ -66,7 +66,7 @@ jobs:
           "RUSTDESK_ID=$id" | Out-File -Append $env:GITHUB_ENV
           Write-Host "✅ RustDesk ID: $id"
 
-      # 2. SETUP E START DO NGROK (AGORA VEM ANTES DE TUDO)
+      # 2. SETUP E START DO NGROK (DOMÍNIO FIXO)
       - name: Setup & Start Ngrok
         run: |
           Write-Host "🌐 Ngrok setup..."
@@ -78,37 +78,31 @@ jobs:
           # Configura Token
           & $exe.FullName config add-authtoken "${{ inputs.ngrok_token }}"
           
-          # Inicia Ngrok na porta 5000 (Onde o Python vai rodar depois)
-          Write-Host "🚀 Iniciando Túnel Ngrok..."
-          Start-Process $exe.FullName -ArgumentList "http","5000" -WindowStyle Hidden
+          # Inicia Ngrok com DOMÍNIO FIXO
+          # --domain=debera-obese-interestedly.ngrok-free.dev
+          Write-Host "🚀 Iniciando Túnel Ngrok (Fixo)..."
+          $args = @("http", "--domain=debera-obese-interestedly.ngrok-free.dev", "5000")
+          Start-Process $exe.FullName -ArgumentList $args -WindowStyle Hidden
           
-          # Espera 15 segundos para garantir que conectou (Correção do erro de URL vazia)
-          Start-Sleep 15
+          Start-Sleep 10
           
-          # Pega a URL Pública
-          $url = ""
-          for ($i = 1; $i -le 10; $i++) {
-            try { 
-                $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
-                if ($t.tunnels.Count -gt 0) { 
-                    $url = $t.tunnels[0].public_url
-                    break 
-                }
-            } catch { 
-                Write-Host "   ⏳ Tentando pegar URL ($i/10)..."
-                Start-Sleep 2 
-            }
+          # Verifica se subiu
+          $url = "https://debera-obese-interestedly.ngrok-free.dev"
+          try { 
+              $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
+              if ($t.tunnels.Count -gt 0) { 
+                  Write-Host "✅ Túnel detectado na API local."
+              }
+          } catch { 
+              Write-Host "⚠️ API local do Ngrok ainda não respondeu, mas assumindo domínio fixo." 
           }
-
-          if (-not $url) { Write-Warning "⚠️ Não foi possível pegar a URL do Ngrok agora. Verifique os logs depois." }
           
-          # Salva para usar nos próximos passos
           "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
           "NGROK_EXE=$($exe.FullName)" | Out-File -Append $env:GITHUB_ENV
           
-          Write-Host "✅ Ngrok Ativo: $url"
+          Write-Host "✅ URL Definida: $url"
 
-      # 3. Optimization (Agora roda DEPOIS do Ngrok estar garantido)
+      # 3. Optimization (Desktop)
       - name: Run Optimization (Desktop)
         run: |
           Write-Host "⚡ Optimization (Desktop)..."
@@ -158,12 +152,10 @@ jobs:
             exit 1
           }
 
-      # 6. Cria o Servidor Webhook (Código)
+      # 6. Cria o Servidor Webhook (A GAMBIARRA DO CMD)
       - name: Create Webhook Server Code
         run: |
           $code = @'
-          import sys
-          import subprocess
           import os
           from flask import Flask, request, jsonify
           from flask_cors import CORS
@@ -176,7 +168,6 @@ jobs:
           
           # CAMINHO DO SCRIPT NO DESKTOP
           DESKTOP_PATH = os.path.join(os.environ['USERPROFILE'], 'Desktop')
-          SCRIPT_PATH = os.path.join(DESKTOP_PATH, 'usar_otimizado.py')
           
           RD_ID = os.environ.get('RUSTDESK_ID', 'N/A')
           RD_PASS = os.environ.get('RUSTDESK_PASSWORD', 'N/A')
@@ -198,7 +189,7 @@ jobs:
                   'status': 'online',
                   'rustdesk_id': RD_ID,
                   'rustdesk_password': RD_PASS,
-                  'script_loaded': os.path.exists(SCRIPT_PATH)
+                  'ngrok_domain': 'debera-obese-interestedly.ngrok-free.dev'
               })
 
           @app.route('/webhook', methods=['POST'])
@@ -212,27 +203,25 @@ jobs:
               if not link or not amount:
                   return jsonify({'error': 'Dados faltando (inviteLink ou amount)'}), 400
               
-              if not os.path.exists(SCRIPT_PATH):
-                  return jsonify({'error': 'Script usar_otimizado.py não encontrado no Desktop'}), 500
-
+              # A GAMBIARRA DO CMD:
+              # start: inicia novo processo
+              # cmd /k: abre cmd e MANTÉM aberto (/k de keep)
+              # python ...: o comando exato
+              # "Titulo": Título da janela
+              
+              comando_cmd = f'start "AUTOMACAO_SUNNI" /MAX cmd /k "cd /d {DESKTOP_PATH} && python usar_otimizado.py --link "{link}" --amount {amount}"'
+              
               try:
-                  cmd = [
-                      sys.executable, 
-                      SCRIPT_PATH, 
-                      "--link", str(link), 
-                      "--amount", str(amount)
-                  ]
-                  
-                  # Executa no Desktop
-                  subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE, cwd=DESKTOP_PATH)
+                  print(f"🖥️ Executando CMD: {comando_cmd}")
+                  os.system(comando_cmd)
                   
                   return jsonify({
                       'success': True, 
-                      'message': 'Automação iniciada',
-                      'command': f'python usar_otimizado.py --amount {amount}'
+                      'message': 'CMD Aberto na VM',
+                      'details': 'Olhe a tela do RustDesk!'
                   })
               except Exception as e:
-                  print(f"❌ Erro ao iniciar: {e}", flush=True)
+                  print(f"❌ Erro ao abrir CMD: {e}", flush=True)
                   return jsonify({'success': False, 'error': str(e)}), 500
 
           if __name__ == '__main__':
@@ -244,17 +233,16 @@ jobs:
           Set-Content -Path "$env:TEMP\webhook.py" -Value $code -Encoding UTF8
           Write-Host "✅ Código do Webhook gerado."
 
-      # 7. Inicia o Webhook (Último passo)
+      # 7. Inicia o Webhook
       - name: Start Webhook Server
         run: |
           $env:SECRET = "${{ inputs.webhook_secret }}"
           $env:RUSTDESK_PASSWORD = "${{ inputs.rustdesk_password }}"
           
-          # Inicia o Python (O Ngrok já está rodando desde o passo 2)
           Start-Process python -ArgumentList "$env:TEMP\webhook.py" -WindowStyle Hidden
           
           Write-Host ""
-          Write-Host "🚀 SISTEMA PRONTO (ORDEM CORRIGIDA)"
+          Write-Host "🚀 SISTEMA PRONTO (FIXED DOMAIN + CMD POPUP)"
           Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           Write-Host "🌐 URL da API: $env:WEBHOOK_URL/info"
           Write-Host "🆔 RustDesk ID: $env:RUSTDESK_ID"
