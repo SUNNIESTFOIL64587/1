@@ -212,27 +212,23 @@ if __name__ == '__main__':
           Start-Process python -ArgumentList "$env:TEMP\webhook.py" -WindowStyle Hidden
           Start-Sleep 5
           
-          # Start Ngrok
+          # Start Ngrok with FIXED domain
           $ngrok = "$env:TEMP\ngrok\ngrok.exe"
-          Start-Process $ngrok -ArgumentList "http","5000" -WindowStyle Hidden
+          $domain = "debera-obese-interestedly.ngrok-free.dev"
+          Start-Process $ngrok -ArgumentList "http","--domain=$domain","5000" -WindowStyle Hidden
           Start-Sleep 5
           
           # Get URL
-          $url = $null
+          $url = "https://$domain"
           for ($i = 1; $i -le 10; $i++) {
             try {
-              $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
-              $url = $t.tunnels[0].public_url
-              if ($url) { break }
+              $t = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
+              if ($t.tunnels.Count -gt 0) { break }
             } catch { Start-Sleep 2 }
           }
           
-          if ($url) {
-            "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
-            Write-Host "✅ Webhook URL: $url/webhook"
-          } else {
-            Write-Error "Ngrok failed"
-          }
+          "WEBHOOK_URL=$url" | Out-File -Append $env:GITHUB_ENV
+          Write-Host "✅ Webhook URL: $url/webhook (FIXED DOMAIN)"
 
       - name: Display Info
         run: |
